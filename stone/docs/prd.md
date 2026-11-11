@@ -1,8 +1,8 @@
 ---
 type: doc
 title: PRD
-description: Your project's plan, docs, architecture and code graph, linked in one git repo, for people and AI agents.
-status: stable
+description: 'Historic requirements from October 2026. Current docs: docs/product-overview.'
+status: deprecated
 generated: { by: claude-code, at: 2026-11-11 }
 ---
 
