@@ -64,6 +64,7 @@ fn every_command_in_a_guide_topic_exists() {
         ("stone arch nope", Some("arch nope")),
         ("stone arch gaps", None),
         ("stone config add-code-root <path>", None),
+        ("stone task check <id>", None),
         ("stone --help", None),
     ] {
         assert_eq!(wrong_command(span).as_deref(), expected, "{span}");

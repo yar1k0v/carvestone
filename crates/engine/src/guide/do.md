@@ -1,6 +1,6 @@
 # Doing the work in stone
 
-1. `stone task move <id> in-progress` marks the task taken, so the store shows who has it.
+1. `stone task move <id> in-progress` marks the task taken, so the store shows who has it. It refuses a task that `stone task check <id>` finds unready, and `--force` overrides that.
 2. `stone brief <id>` prints the task with its linked doc sections, its components with entry points, and finished tasks like it. For the rest, `stone search "words"` finds an item and `stone get <id>#<anchor>` prints one section.
 3. Edits fit the store as the work goes: `stone edit <id> --section <name> --text "..."`. Fields take `--set key=value`; lists take `a,b`, `+a`, `-a`.
 4. `stone edit <id> --check-ac <n>` ticks an acceptance criterion as it passes. `stone edit <id> --note "<text>"` adds a dated bullet to `## Notes` without rewriting the section; the same text twice adds it once.

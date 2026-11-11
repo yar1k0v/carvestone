@@ -248,6 +248,7 @@ pub const CLI_NESTED: &[(&str, &str)] = &[
     ("arch", "connect"),
     ("task", "move"),
     ("task", "next"),
+    ("task", "check"),
     ("task", "fill-closed"),
     ("task", "remove"),
     ("config", "add-code-root"),
