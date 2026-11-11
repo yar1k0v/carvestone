@@ -12,10 +12,10 @@ Toolbox: `explore`, `questions`, `planning`.
 
 ## Steps
 
-1. Load the skills you need in one message, then run `explore` on the topic or task.
+1. Load the skills you need in one message, then run `explore` on the topic or task. With no task yet, start from `map`.
 2. Work not fully defined: `questions`, until the owner confirms. Write the decision, doc section or tasks the owner agreed to.
 3. Defined work with no task: `target/debug/stone.exe new task --title "..." --set milestone=M-n --set components=<arch ids>`.
-4. `planning`, until the task is ready. Budget: 12 requests.
+4. `planning`, until `task check <id>` prints `is ready`. Budget: 12 requests.
 5. Hand the ready task to the `developer` agent with its id.
 6. Task in review: ask the owner with `AskUserQuestion` whether to run a QA pass. Hand the task to the `reviewer` agent with its id and the answer.
 7. Task returned to todo: read the findings under `## Notes`, then hand it back to the `developer` agent, or replan it if the plan was wrong.

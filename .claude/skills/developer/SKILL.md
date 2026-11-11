@@ -14,7 +14,7 @@ Toolbox: `explore`, `debug`, `tdd`, `code`, `check`, `close`.
 
 Load the skills this task needs in one message, write the request plan (rules), then follow them in this order.
 
-1. `explore`. Not ready: report the missing parts, stop. Ready: `task move <id> in-progress` in the same message as your first Reads.
+1. `explore`. Not ready (`task check <id>` lists gaps): report them, stop. Ready: `task move <id> in-progress` in the same message as your first Reads.
 2. By the task's kind:
    - feature or chore: `tdd`, then `code`.
    - bug: `debug`, `tdd`, then the smallest fix at the root cause with `code`. Skip `debug` only when the plan states a confirmed cause with `path:line`.

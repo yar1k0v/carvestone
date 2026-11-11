@@ -25,7 +25,7 @@ Use `edit <id>` with `--set` for fields, and `--section <name>` for sections.
 |---|---|
 | `description` | 1–3 lines: what changes, for whom |
 | `acceptance-criteria` | ``- [ ] `<command>` → <output that passes>``, narrowest crate first. Test filters state `N passed` |
-| `plan` | Numbered steps, one action each. Name `path#Symbol`, never line numbers. For each seam: what it catches, what it misses, and the test choice (patch, add or none) |
+| `plan` | Numbered steps, one action each. Name `path#Symbol`, never line numbers. For each seam: what it catches, what it misses, and the test choice (patch, add or none). A file or symbol the task adds carries `(new)` after its code span. An example path in a step is written without the hash form, or it is read as a target. |
 | `components`, `paths` | Both are required. `paths` lists every file allowed to change |
 | tag | `size-s` (up to 15 Developer requests) or `size-m` (up to 30). Bigger: propose a split to the owner, and create nothing |
 
@@ -33,7 +33,7 @@ Name any outside type a step uses once, as `path#Type`.
 
 ## Verify
 
-1. `get <id>` shows every part above, and `check` adds no problems.
+1. `task check <id>` prints `is ready`, `get <id>` shows every part above, and `check` adds no problems.
 2. Read the plan as the Developer. Each step allows one reasonable result, and each name exists in the code or an earlier step.
 3. Cut vague steps such as "add validation" or "handle errors".
 4. Give each likely failure a test or a check.
