@@ -1,7 +1,7 @@
 ---
 type: decision
 title: C4 diagrams are generated from architecture items
-status: proposed
+status: accepted
 created: 2026-11-07
 generated: { by: claude-code, at: 2026-11-07 }
 ---

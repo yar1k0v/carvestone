@@ -1,7 +1,7 @@
 ---
 type: decision
 title: 'Web UI: four spaces, state on every item, owner actions only'
-status: proposed
+status: accepted
 created: 2026-11-04
 generated: { by: claude-code, at: 2026-11-04 }
 ---

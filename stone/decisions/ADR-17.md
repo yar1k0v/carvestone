@@ -1,7 +1,7 @@
 ---
 type: decision
 title: No framework detection; connections are written and languages come from SCIP config
-status: proposed
+status: accepted
 created: 2026-11-07
 generated: { by: claude-code, at: 2026-11-07 }
 ---

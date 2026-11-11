@@ -1,7 +1,7 @@
 ---
 type: decision
 title: First public release keeps four linked parts and cuts migration and inferred patterns
-status: proposed
+status: accepted
 created: 2026-11-07
 generated: { by: claude-code, at: 2026-11-07 }
 ---

@@ -1,7 +1,7 @@
 ---
 type: decision
 title: The architecture UI is two C4 diagrams, system architecture and solution architecture
-status: proposed
+status: accepted
 created: 2026-11-07
 generated: { by: claude-code, at: 2026-11-07 }
 ---
