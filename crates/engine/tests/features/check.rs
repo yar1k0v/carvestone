@@ -47,6 +47,7 @@ fn healthy() -> Store {
         "---\ntype: component\ntitle: Auth\ncode: [crates/auth/**]\n---\n",
     );
     store.write("crates/auth/lib.rs", "pub fn login() {}\n");
+    store.repo().write_index(false).unwrap();
     store.git_track();
     store
 }
@@ -124,6 +125,7 @@ fn problems() {
         "stone/docs/dated.md:4: date: stale_after `soon` is not a date; use YYYY-MM-DD",
         "stone/docs/misfiled.md:2: folder: a task belongs in stone/tasks/",
         "stone/docs/timed.md:4: date: created `2026-11-01T10:00` is not a date; use YYYY-MM-DD",
+        "stone/index.md:1: index: the index is out of date for stone/docs/dated.md, stone/docs/misfiled.md, stone/docs/timed.md, stone/tasks/CS-04.md, stone/tasks/CS-1.md and 2 more; run `stone index`",
         "stone/tasks/CS-04.md:1: duplicate-id: same id as stone/tasks/CS-04.md, stone/tasks/CS-4.md; give one a new number (`stone renumber <path>`) or remove one",
         "stone/tasks/CS-04.md:1: file-name: name the file CS-4.md",
         "stone/tasks/CS-1.md:5: relation: docs/missing not found",

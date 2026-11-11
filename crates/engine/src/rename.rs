@@ -5,6 +5,7 @@ use carvestone_core::{IdScheme, ItemId, Ref, links};
 use carvestone_store::Entry;
 use serde::Serialize;
 
+use crate::index_file;
 use crate::renumber::{refers, rewrite_body, rewrite_fields};
 use crate::repo::{EngineError, Repo};
 
@@ -32,11 +33,11 @@ fn folder_of(id: &ItemId) -> &str {
 }
 
 /// The path parts of a store file: `stone/docs/x.md` is `["stone", "docs", "x.md"]`.
-fn parts(path: &str) -> Vec<String> {
+pub(crate) fn parts(path: &str) -> Vec<String> {
     path.split('/').filter(|s| !s.is_empty()).map(str::to_string).collect()
 }
 
-fn dir_of(file: &[String]) -> &[String] {
+pub(crate) fn dir_of(file: &[String]) -> &[String] {
     &file[..file.len().saturating_sub(1)]
 }
 
@@ -56,7 +57,7 @@ fn resolve(dir: &[String], path: &str) -> Option<Vec<String>> {
 }
 
 /// The relative link from the folder `dir` to the file `to`.
-fn relative(dir: &[String], to: &[String]) -> String {
+pub(crate) fn relative(dir: &[String], to: &[String]) -> String {
     let to_dir = dir_of(to);
     let common = dir.iter().zip(to_dir).take_while(|(a, b)| a == b).count();
     let mut out = "../".repeat(dir.len() - common);
@@ -270,6 +271,13 @@ impl Repo {
                 EngineError::Invalid(format!(
                     "{e}; links already use {new}; run `stone rename {old} {new}` again"
                 ))
+            })?;
+            self.sync_index(lock, |index| {
+                let index = index_file::drop_line(index, &old);
+                match &target.item {
+                    Some(item) => index_file::put(&index, scheme, &new, item),
+                    None => index,
+                }
             })?;
         }
         Ok(Renamed {

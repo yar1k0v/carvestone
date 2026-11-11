@@ -8,6 +8,7 @@ use serde::Serialize;
 use serde_norway::Value;
 
 use crate::check_links::{RELATION_KEYS, join_target};
+use crate::index_file;
 use crate::repo::{EngineError, Repo};
 use crate::resolve::Snapshot;
 
@@ -327,6 +328,13 @@ impl Repo {
                     scheme.short(&new).unwrap_or_else(|| new.to_string()),
                     target.path
                 ))
+            })?;
+            self.sync_index(lock, |index| {
+                let index = index_file::drop_line(index, &target.id);
+                match &target.item {
+                    Some(item) => index_file::put(&index, scheme, &new, item),
+                    None => index,
+                }
             })?;
         }
         Ok(Renumbered {

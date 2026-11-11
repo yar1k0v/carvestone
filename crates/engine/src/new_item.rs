@@ -1,10 +1,12 @@
 //! `stone new`: build the file text, then allocate the number and create the file under one lock.
 
 use carvestone_core::{IdScheme, ItemId, ItemType, NumberedKind, sections, set_section};
+use carvestone_store::store::item_from_document;
 use carvestone_store::{Config, Document, FrontmatterError, StoreError};
 
 use crate::create::{NewItem, Written, now, stamp_by, stamp_value};
 use crate::fields::{SetCtx, SetValue, add_links, apply_set, apply_value};
+use crate::index_file;
 use crate::repo::{EngineError, Repo};
 use crate::resolve::Snapshot;
 
@@ -310,6 +312,10 @@ impl Repo {
             }
         };
         self.store.create(&lock, &id, &text)?;
+        if let Ok(doc) = Document::parse(&text) {
+            let item = item_from_document(id.clone(), &doc);
+            self.sync_index(&lock, |index| index_file::put(index, &scheme, &id, &item))?;
+        }
         drop(lock);
         warnings.extend(left_out_warning(req));
         Ok(Written {

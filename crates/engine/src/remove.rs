@@ -5,6 +5,7 @@ use carvestone_core::ItemType;
 use serde::Serialize;
 
 use crate::git_cache::index_with_history;
+use crate::index_file;
 use crate::renumber::refers;
 use crate::repo::{EngineError, Repo};
 
@@ -30,7 +31,7 @@ enum Way {
 /// At most this many names go into a refusal.
 const NAMED: usize = 5;
 
-fn few(names: &[String]) -> String {
+pub(crate) fn few(names: &[String]) -> String {
     let mut shown = names.iter().take(NAMED).cloned().collect::<Vec<_>>().join(", ");
     if names.len() > NAMED {
         shown.push_str(&format!(" and {} more", names.len() - NAMED));
@@ -121,6 +122,7 @@ impl Repo {
 
         if let Some(lock) = &lock {
             self.store.remove(lock, &entry.id)?;
+            self.sync_index(lock, |index| index_file::drop_line(index, &entry.id))?;
         }
         Ok(Removed {
             id: label,

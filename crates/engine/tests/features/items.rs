@@ -138,6 +138,99 @@ fn an_edit_changes_only_its_lines_and_keeps_crlf() {
 }
 
 #[test]
+fn the_index_follows_every_write() {
+    const HEAD: &str = "---\nokf_version: \"0.2\"\n---\n\n# Docs\n\n";
+    let store = Store::new();
+    let repo = store.repo();
+    let index = || store.read("stone/index.md");
+
+    let guide = NewItem {
+        set: vec![("description".into(), "How to install.".into())],
+        ..new("doc", "Guide", Some("guide"))
+    };
+    repo.create(&guide, false).unwrap();
+    assert_eq!(index(), format!("{HEAD}- [Guide](docs/guide.md) - How to install.\n"));
+
+    store.write("stone/tasks/CS-2.md", BARE);
+    repo.edit("CS-2", &set("priority", "high"), false).unwrap();
+    let both =
+        format!("{HEAD}- [Guide](docs/guide.md) - How to install.\n\n# Tasks\n\n- [CS-2: Bare](tasks/CS-2.md)\n");
+    assert_eq!(index(), both);
+
+    repo.edit("CS-2", &set("title", "Renamed [x]"), false).unwrap();
+    let renamed = both.replace("Bare", "Renamed (x)");
+    assert_eq!(index(), renamed);
+
+    repo.edit("CS-2", &set("title", "Renamed [x]"), false).unwrap();
+    assert_eq!(index(), renamed);
+
+    repo.rename_item("docs/guide", "docs/setup", false).unwrap();
+    let moved = renamed.replace("docs/guide.md", "docs/setup.md");
+    assert_eq!(index(), moved);
+
+    repo.delete_item("CS-2", false, false).unwrap();
+    let gone = format!("{HEAD}- [Guide](docs/setup.md) - How to install.\n\n# Tasks\n\n");
+    assert_eq!(index(), gone);
+
+    repo.edit("docs/setup", &set("title", "Other"), true).unwrap();
+    assert_eq!(index(), gone);
+}
+
+#[test]
+fn stone_index_writes_the_full_index_and_keeps_other_lines() {
+    let store = Store::new();
+    store.write(
+        "stone/docs/b.md",
+        "---\ntype: doc\ntitle: Bee\ndescription: Second.\n---\n",
+    );
+    store.write(
+        "stone/docs/a.md",
+        "---\ntype: doc\ntitle: Ay\n---\n\n## Summary\n\nShort text.\n",
+    );
+    store.write(
+        "stone/tasks/CS-10.md",
+        "---\ntype: task\ntitle: Ten\nstatus: todo\n---\n",
+    );
+    store.write(
+        "stone/tasks/CS-9.md",
+        "---\ntype: task\ntitle: Nine\nstatus: todo\n---\n",
+    );
+    store.write(
+        "stone/decisions/ADR-1.md",
+        "---\ntype: decision\ntitle: Pick\nstatus: accepted\n---\n",
+    );
+    store.write("stone/arch/acme.md", "---\ntype: system\ntitle: Acme\n---\n");
+    store.write(
+        "stone/index.md",
+        "---\r\nokf_version: \"0.2\"\r\n---\r\n\r\n# Notes\r\n\r\n- [Site](https://example.com)\r\n- [Tasks](tasks/)\r\n- [Old](docs/gone.md)\r\n",
+    );
+    let repo = store.repo();
+
+    let first = repo.write_index(false).unwrap();
+    let want = "---\r\nokf_version: \"0.2\"\r\n---\r\n\r\n# Notes\r\n\r\n- [Site](https://example.com)\r\n- [Tasks](tasks/)\r\n\r\n# Docs\r\n\r\n- [Ay](docs/a.md) - Short text.\r\n- [Bee](docs/b.md) - Second.\r\n\r\n# Architecture\r\n\r\n- [Acme](arch/acme.md)\r\n\r\n# Decisions\r\n\r\n- [ADR-1: Pick](decisions/ADR-1.md)\r\n\r\n# Tasks\r\n\r\n- [CS-9: Nine](tasks/CS-9.md)\r\n- [CS-10: Ten](tasks/CS-10.md)\r\n";
+    assert!(first.changed);
+    assert_eq!(store.read("stone/index.md"), want);
+
+    let again = repo.write_index(false).unwrap();
+    assert!(!again.changed);
+    assert_eq!(store.read("stone/index.md"), want);
+
+    let found = |repo: &carvestone_engine::Repo| -> Vec<String> {
+        repo.check().unwrap().iter().map(ToString::to_string).collect()
+    };
+    assert_eq!(found(&repo), Vec::<String>::new());
+
+    store.write(
+        "stone/tasks/CS-9.md",
+        "---\ntype: task\ntitle: Nine again\nstatus: todo\n---\n",
+    );
+    assert_eq!(
+        found(&repo),
+        ["stone/index.md:1: index: the index is out of date for stone/tasks/CS-9.md; run `stone index`"]
+    );
+}
+
+#[test]
 fn the_section_body_edits_the_text_before_the_first_heading() {
     let store = Store::new();
     let repo = store.repo();

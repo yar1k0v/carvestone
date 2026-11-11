@@ -222,6 +222,8 @@ pub const CLI_COMMANDS: &[&str] = &[
     "new",
     "edit",
     "link",
+    "index",
+    "export",
     "task",
     "config",
     "renumber",

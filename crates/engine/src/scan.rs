@@ -10,6 +10,7 @@ use std::path::Path;
 
 use carvestone_core::{ItemId, ItemType};
 use carvestone_store::Document;
+use carvestone_store::store::item_from_document;
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use rusqlite::Connection;
 
@@ -17,6 +18,7 @@ use crate::code::open;
 use crate::code_entries::{detect, targets_in};
 use crate::code_index::{project_dir, root_prefixes, stored_project_dirs};
 use crate::create::now;
+use crate::index_file;
 use crate::modules::{Module, stored as stored_modules};
 use crate::owner::{Element, arch_elements, tracked};
 use crate::repo::{EngineError, Repo};
@@ -557,7 +559,12 @@ pub fn scan(repo: &Repo, opts: &ScanOpts) -> Result<ScanReport, EngineError> {
         if let Some(lock) = &lock {
             match outcome {
                 ScanState::New | ScanState::Changed => {
-                    repo.store.save(lock, &ItemId::from_path(&key), &text)?;
+                    let id = ItemId::from_path(&key);
+                    repo.store.save(lock, &id, &text)?;
+                    if let Ok(doc) = Document::parse(&text) {
+                        let item = item_from_document(id.clone(), &doc);
+                        repo.sync_index(lock, |index| index_file::put(index, &snapshot.scheme, &id, &item))?;
+                    }
                     state.insert(key.clone(), hash(&text));
                 }
                 ScanState::Unchanged => {
@@ -575,10 +582,11 @@ pub fn scan(repo: &Repo, opts: &ScanOpts) -> Result<ScanReport, EngineError> {
             continue;
         }
         if opts.prune {
-            if lock.is_some() {
+            if let Some(lock) = &lock {
                 let path = layout.data_dir.join(key);
                 fs::remove_file(&path)
                     .map_err(|e| EngineError::Invalid(format!("cannot delete {}: {e}", path.display())))?;
+                repo.sync_index(lock, |index| index_file::drop_line(index, &ItemId::from_path(key)))?;
                 state.remove(key);
             }
             entries.push((key.clone(), ScanState::Pruned));

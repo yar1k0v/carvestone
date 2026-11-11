@@ -153,6 +153,8 @@ fn every_command_answers_on_a_small_store() {
                 "updated CS-1",
             ),
             (&["link", "CS-1", "docs/guide"], 0, "updated CS-1"),
+            (&["index"], 0, "no change: stone/index.md is up to date"),
+            (&["export", "--okf", "okf-out"], 0, "exported 5 files to okf-out"),
             (&["task", "next"], 0, "CS-1  high  First task"),
             (&["task", "check", "CS-1"], 1, "CS-1 is not ready:"),
             (&["task", "move", "CS-1", "in-progress", "--force"], 0, "updated CS-1"),

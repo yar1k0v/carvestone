@@ -3,6 +3,7 @@
 use carvestone_store::{Document, Store};
 
 use crate::check::Problem;
+use crate::index_file;
 use crate::repo::EngineError;
 use crate::resolve::Snapshot;
 
@@ -38,6 +39,10 @@ pub(crate) fn file_problems(store: &Store, snapshot: &Snapshot, out: &mut Vec<Pr
                     "index",
                     "the root index must start with frontmatter declaring `okf_version`",
                 ));
+            }
+            let stale = index_file::stale(text, snapshot);
+            if !stale.is_empty() {
+                out.push(Problem::warning(path, 1, "index", index_file::stale_message(&stale)));
             }
         } else if text.starts_with("---\n") || text.starts_with("---\r\n") {
             out.push(Problem::new(

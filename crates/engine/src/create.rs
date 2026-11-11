@@ -158,7 +158,7 @@ pub fn now() -> String {
 }
 
 const FOLDERS: [&str; 7] = ["tasks", "milestones", "decisions", "docs", "plans", "refs", "arch"];
-const INDEX: &str = "---\nokf_version: \"0.2\"\n---\n";
+pub(crate) const INDEX: &str = "---\nokf_version: \"0.2\"\n---\n";
 
 fn io_err(path: &Path) -> impl FnOnce(std::io::Error) -> StoreError + '_ {
     move |source| StoreError::Io {

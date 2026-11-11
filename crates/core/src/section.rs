@@ -164,7 +164,8 @@ fn find<'a>(secs: &'a [Section], name: &str) -> Option<&'a Section> {
         .or_else(|| secs.iter().find(|s| s.anchor == name.to_lowercase()))
 }
 
-fn eol(body: &str) -> &'static str {
+/// The line ending of the first line: `\r\n` or `\n`.
+pub fn eol(body: &str) -> &'static str {
     match body.find('\n') {
         Some(i) if body[..i].ends_with('\r') => "\r\n",
         _ => "\n",
@@ -644,25 +645,40 @@ pub fn md_links(body: &str, first_line: usize) -> Vec<(usize, String)> {
         .collect()
 }
 
-/// Every `[[target]]` in the body with its file line, skipping fenced blocks
-/// and inline code. The target keeps any `#anchor`.
-pub fn body_links(body: &str, first_line: usize) -> Vec<(usize, String)> {
+/// Every `[[target]]` in the body in order, skipping fenced blocks and inline code. `start..end`
+/// covers the whole `[[…]]` and the target keeps any `#anchor`.
+pub fn wiki_links(body: &str, first_line: usize) -> Vec<Link> {
     let mut out = Vec::new();
-    for (line_no, _, visible) in prose_lines(body, first_line) {
-        let mut rest = visible.as_str();
-        while let Some(open) = rest.find("[[") {
-            let after = &rest[open + 2..];
-            let Some(close) = after.find("]]") else {
+    for (line, line_start, visible) in prose_lines(body, first_line) {
+        let mut at = 0;
+        while let Some(open) = visible[at..].find("[[") {
+            let open = at + open;
+            let Some(close) = visible[open + 2..].find("]]") else {
                 break;
             };
-            let target = after[..close].trim();
+            let end = open + 2 + close + 2;
+            let target = visible[open + 2..end - 2].trim();
             if !target.is_empty() {
-                out.push((line_no, target.to_string()));
+                out.push(Link {
+                    line,
+                    start: line_start + open,
+                    end: line_start + end,
+                    target: target.to_string(),
+                });
             }
-            rest = &after[close + 2..];
+            at = end;
         }
     }
     out
+}
+
+/// Every `[[target]]` in the body with its file line, skipping fenced blocks
+/// and inline code. The target keeps any `#anchor`.
+pub fn body_links(body: &str, first_line: usize) -> Vec<(usize, String)> {
+    wiki_links(body, first_line)
+        .into_iter()
+        .map(|link| (link.line, link.target))
+        .collect()
 }
 
 /// One C4 diagram of a body: a ` ```mermaid ` fence whose first line starts with `C4`.

@@ -137,6 +137,22 @@ impl Store {
         write_atomic(&path, text)
     }
 
+    /// The root `index.md` as it is on disk; `None` when the store has none yet.
+    pub fn read_index(&self) -> Result<Option<String>, StoreError> {
+        let path = self.layout.data_dir.join("index.md");
+        match fs::read_to_string(&path) {
+            Ok(text) => Ok(Some(text)),
+            Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(io_err(&path, e)),
+        }
+    }
+
+    /// Replaces the root `index.md`. The lock must cover the read that produced `text`.
+    pub fn save_index(&self, lock: &WriteLock, text: &str) -> Result<(), StoreError> {
+        lock.check(&self.layout)?;
+        write_atomic(&self.layout.data_dir.join("index.md"), text)
+    }
+
     /// Deletes the item's file. The lock must cover the read that decided the file may go.
     pub fn remove(&self, lock: &WriteLock, id: &ItemId) -> Result<(), StoreError> {
         lock.check(&self.layout)?;

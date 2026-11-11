@@ -1,10 +1,12 @@
 //! Changing items: `edit`, and the locked read-modify-write every writer shares.
 
 use carvestone_core::{ItemType, Section, check_box, section_text, sections, set_section};
+use carvestone_store::store::item_from_document;
 use carvestone_store::{Document, Entry, StoreError};
 
 use crate::create::{Written, now, stamp_by, stamp_value, today};
 use crate::fields::{SetCtx, SetValue, apply_unset, apply_value, check_done_sections, sync_closed};
+use crate::index_file;
 use crate::query::etag_of;
 use crate::repo::{EngineError, Repo};
 use crate::resolve::Snapshot;
@@ -110,6 +112,8 @@ impl Repo {
         let changed = text != entry.text;
         if changed && let Some(lock) = &lock {
             self.store.save(lock, &entry.id, &text)?;
+            let item = item_from_document(entry.id.clone(), &doc);
+            self.sync_index(lock, |index| index_file::put(index, &snapshot.scheme, &entry.id, &item))?;
         }
         Ok(Written {
             id: snapshot.label(entry),

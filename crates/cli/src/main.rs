@@ -230,6 +230,18 @@ enum Command {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Write stone/index.md: one line per item with its description.
+    Index {
+        /// Print the resulting file and write nothing.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Write a one-way copy of the store where every relation is a standard markdown link (OKF).
+    Export {
+        /// The folder to write; it must be new or empty and outside the store.
+        #[arg(long, value_name = "FOLDER", required = true)]
+        okf: PathBuf,
+    },
     /// Task workflow.
     Task {
         #[command(subcommand)]
@@ -1064,6 +1076,29 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         }
         Command::Link { from, to, dry_run } => {
             show(&repo.link(&from, &to, dry_run)?, Shown::Edited, dry_run, cli.json)?;
+        }
+        Command::Index { dry_run } => {
+            let written = repo.write_index(dry_run)?;
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&written)?);
+            } else if dry_run {
+                print!("{}", with_newline(written.text));
+            } else if written.changed {
+                println!("updated stone/index.md");
+            } else {
+                println!("no change: stone/index.md is up to date");
+            }
+        }
+        Command::Export { okf } => {
+            let exported = repo.export_okf(&okf)?;
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&exported)?);
+            } else {
+                println!("exported {} files to {}", exported.files, exported.folder);
+                for entry in &exported.unresolved {
+                    eprintln!("warning: {entry} names no item; left as written");
+                }
+            }
         }
         Command::Config {
             command: ConfigCommand::AddCodeRoot { path, dry_run },
