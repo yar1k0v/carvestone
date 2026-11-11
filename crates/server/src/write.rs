@@ -66,6 +66,7 @@ pub(crate) async fn patch_item(
         replace_nested: body.replace_nested,
         check_ac: body.check_ac.into_iter().collect(),
         note: body.note,
+        force: body.force,
     };
     let if_match = wanted_etag(&headers, body.if_match)?;
     let dry_run = body.dry_run;

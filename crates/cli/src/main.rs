@@ -461,6 +461,9 @@ struct EditArgs {
     /// Print the resulting file and write nothing.
     #[arg(long)]
     dry_run: bool,
+    /// Set the status to in-progress although the ready check finds gaps.
+    #[arg(long)]
+    force: bool,
 }
 
 #[derive(Args)]
@@ -1066,6 +1069,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
                 replace_nested: args.replace_nested,
                 check_ac: args.check_ac,
                 note: args.note,
+                force: args.force,
             };
             show(
                 &repo.edit(&args.id, &req, args.dry_run)?,

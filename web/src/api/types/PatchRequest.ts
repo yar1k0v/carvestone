@@ -19,6 +19,10 @@ check_ac?: number,
  */
 note?: string, dry_run?: boolean, 
 /**
+ * Set a task to in-progress although the ready check finds gaps.
+ */
+force?: boolean, 
+/**
  * The etag the client last read; a different one on disk refuses the write.
  */
 if_match?: string, };

@@ -103,6 +103,10 @@ pub struct PatchRequest {
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub dry_run: bool,
+    /// Set a task to in-progress although the ready check finds gaps.
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
+    pub force: bool,
     /// The etag the client last read; a different one on disk refuses the write.
     #[cfg_attr(feature = "ts", ts(optional))]
     pub if_match: Option<String>,

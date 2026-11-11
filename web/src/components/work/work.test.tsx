@@ -38,6 +38,9 @@ const COMMITS: TaskCommit[] = [
   { sha: "2222222bbbb", repo: "backend", date: "2026-10-29T10:00:00Z", title: "fix: guessed", how: "path" },
 ];
 
+const FIRST_GAP = "components is empty; set it with `stone edit CS-1 --set components=<arch id>`";
+const SECOND_GAP = "paths is empty; set it with `stone edit CS-1 --set paths=<file>,<file>`";
+
 function task(extra = {}) {
   return fakeApi({
     "/api/items": { body: ROWS },
@@ -76,6 +79,40 @@ describe("task page", () => {
     await userEvent.selectOptions(fact("Status").getByRole("combobox", { name: "Status" }), "review");
     const call = fetchMock.mock.calls.find(([, init]) => init?.method === "PATCH");
     expect(JSON.parse(String(call?.[1]?.body))).toEqual({ set: { status: "review" }, if_match: "etag" });
+  }, COLD_START_MS);
+
+  it("the_status_picker_offers_the_override", async () => {
+    const bare = itemView("tasks/CS-1", { fields: { title: "The task", status: "todo" } });
+    const { fetchMock } = task({
+      "/api/items/tasks/CS-1": { body: bare },
+      "/api/config": { body: { task_prefix: "CS", statuses: { task: ["todo", "in-progress", "review", "done"] }, priorities: [], task_kinds: [], fields: {} } },
+      "PATCH /api/items/tasks/CS-1": { body: { id: "tasks/CS-1", changed: true, etag: "next" } },
+    });
+    // The first write is refused; the second passes.
+    const answer = fetchMock.getMockImplementation();
+    let refused = false;
+    fetchMock.mockImplementation((input, init) => {
+      if (init?.method === "PATCH" && !refused) {
+        refused = true;
+        const error = `CS-1 is not ready for in-progress: ${FIRST_GAP}; ${SECOND_GAP}; fix them, or run stone edit CS-1 --set status=in-progress --force`;
+        return Promise.resolve(new Response(JSON.stringify({ error, kind: "invalid" }), { status: 422, headers: { "Content-Type": "application/json" } }));
+      }
+      return answer?.(input, init) as Promise<Response>;
+    });
+    renderApp("/tasks/CS-1");
+    await screen.findByRole("heading", { level: 1, name: "The task" }, { timeout: COLD_START_MS });
+    await fact("Status").findByRole("option", { name: "In progress" });
+    await userEvent.selectOptions(fact("Status").getByRole("combobox", { name: "Status" }), "in-progress");
+
+    // Both gaps show unchanged in one paragraph, even though a gap holds `; `; the CLI hint stays out.
+    const alert = await screen.findByText("This task is not ready to start:");
+    expect(within(alert.parentElement as HTMLElement).getByText(`${FIRST_GAP}; ${SECOND_GAP}`)).toBeInTheDocument();
+    expect(screen.queryByText(/fix them, or run/)).toBeNull();
+    expect(screen.queryByText(/--force/)).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Start anyway" }));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "PATCH")).toHaveLength(2));
+    const second = fetchMock.mock.calls.filter(([, init]) => init?.method === "PATCH")[1];
+    expect(JSON.parse(String(second?.[1]?.body))).toEqual({ set: { status: "in-progress" }, force: true, if_match: "etag" });
   }, COLD_START_MS);
 
   it("blocked_by_names_what_is_still_open_and_blocks_reads_backlinks", async () => {

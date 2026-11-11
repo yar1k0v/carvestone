@@ -159,13 +159,7 @@ impl Repo {
                 && let Some(item) = &entry.item
             {
                 let id = snapshot.label(entry);
-                let gaps = ready::gaps(self, &id, item)?;
-                if !gaps.is_empty() {
-                    return Err(EngineError::Invalid(format!(
-                        "{id} is not ready for in-progress: {}; fix them, or run stone task move {id} in-progress --force",
-                        gaps.join("; ")
-                    )));
-                }
+                ready::refuse_unready(self, &id, item, &format!("stone task move {id} in-progress --force"))?;
             }
             if status == "done" {
                 check_done_sections(&self.store.config, &snapshot.label(entry), &doc.body, doc.body_line())?;

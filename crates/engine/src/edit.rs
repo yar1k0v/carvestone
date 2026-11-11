@@ -8,6 +8,7 @@ use crate::create::{Written, now, stamp_by, stamp_value, today};
 use crate::fields::{SetCtx, SetValue, apply_unset, apply_value, check_done_sections, sync_closed};
 use crate::index_file;
 use crate::query::etag_of;
+use crate::ready;
 use crate::repo::{EngineError, Repo};
 use crate::resolve::Snapshot;
 
@@ -23,6 +24,8 @@ pub struct Edit {
     pub check_ac: Vec<usize>,
     /// One line to add under `## Notes`, dated today.
     pub note: Option<String>,
+    /// Set a task to in-progress although the ready check finds gaps.
+    pub force: bool,
 }
 
 /// The item's type, or a pointer to `stone check` when the file has none that is known.
@@ -326,6 +329,20 @@ impl Repo {
             }
             if ty == ItemType::Task {
                 sync_closed(&ctx, doc, was.as_deref())?;
+                if !req.force
+                    && doc.get_str("status").as_deref() == Some("in-progress")
+                    && was.as_deref() != Some("in-progress")
+                {
+                    // The edited document is judged, so one edit may fill a gap and start the task.
+                    let id = snapshot.label(entry);
+                    let edited = item_from_document(entry.id.clone(), doc);
+                    ready::refuse_unready(
+                        self,
+                        &id,
+                        &edited,
+                        &format!("stone edit {id} --set status=in-progress --force"),
+                    )?;
+                }
             }
             let is_done = ty == ItemType::Task && doc.get_str("status").as_deref() == Some("done");
             if is_done {

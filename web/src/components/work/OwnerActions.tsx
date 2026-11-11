@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
-import { api } from "@/api/client";
+import { ApiError, api } from "@/api/client";
 import type { ItemView } from "@/api/types/ItemView";
 import type { PatchReply } from "@/api/types/PatchReply";
 import type { PatchRequest } from "@/api/types/PatchRequest";
@@ -96,10 +96,24 @@ export function Decision({ task, small = false, onDone }: { task: { id: string; 
   );
 }
 
-/** The task's status as a select of the configured statuses; choosing one writes it. */
+const NOT_READY = " is not ready for in-progress: ";
+const NOT_READY_END = "; fix them, or run";
+
+/** The gaps text the engine names when it refuses to start a task; null for any other error. A gap sentence holds `;` itself, so the text is not split. */
+function readGaps(error: Error): string | null {
+  if (!(error instanceof ApiError) || error.status !== 422) return null;
+  const start = error.message.indexOf(NOT_READY);
+  if (start < 0) return null;
+  const rest = error.message.slice(start + NOT_READY.length);
+  const end = rest.lastIndexOf(NOT_READY_END);
+  return end < 0 ? rest : rest.slice(0, end);
+}
+
+/** The task's status as a select of the configured statuses; choosing one writes it. A refused start lists the gaps and offers to start anyway. */
 export function StatusPicker({ item, onDone }: { item: ItemView; onDone: () => void }) {
   const config = useConfig();
   const write = useOwnerWrite(item, onDone);
+  const gaps = write.isError ? readGaps(write.error) : null;
   const current = textField(item.fields, "status") ?? "";
   const known = config.data?.statuses.task ?? [];
   const options = current === "" || known.includes(current) ? known : [current, ...known];
@@ -112,7 +126,15 @@ export function StatusPicker({ item, onDone }: { item: ItemView; onDone: () => v
           </option>
         ))}
       </select>
-      {write.isError ? (
+      {gaps ? (
+        <div role="alert" className="mt-2 rounded-md border border-destructive/50 p-4 text-sm">
+          <p className="font-medium text-destructive">This task is not ready to start:</p>
+          <p className="mt-2">{gaps}</p>
+          <Button size="sm" variant="outline" className="mt-3" disabled={write.isPending} onClick={() => write.mutate({ ...write.variables, force: true })}>
+            Start anyway
+          </Button>
+        </div>
+      ) : write.isError ? (
         <div className="mt-2">
           <ErrorNotice error={write.error} />
         </div>

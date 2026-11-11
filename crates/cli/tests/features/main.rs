@@ -157,6 +157,11 @@ fn every_command_answers_on_a_small_store() {
             (&["export", "--okf", "okf-out"], 0, "exported 5 files to okf-out"),
             (&["task", "next"], 0, "CS-1  high  First task"),
             (&["task", "check", "CS-1"], 1, "CS-1 is not ready:"),
+            (
+                &["edit", "CS-1", "--set", "status=in-progress"],
+                1,
+                "✗ CS-1 is not ready for in-progress: components is empty; set it with `stone edit CS-1 --set components=<arch id>`; paths is empty; set it with `stone edit CS-1 --set paths=<file>,<file>`; criterion 1 carries no command; put the command in a code span; criterion 2 carries no command; put the command in a code span; the plan has no numbered steps; write them under ## Plan; fix them, or run stone edit CS-1 --set status=in-progress --force",
+            ),
             (&["task", "move", "CS-1", "in-progress", "--force"], 0, "updated CS-1"),
             (&["task", "fill-closed"], 0, "0 tasks filled"),
             (&["commit-msg"], 0, "Refs: CS-1"),

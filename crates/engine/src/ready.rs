@@ -146,6 +146,23 @@ pub(crate) fn gaps(repo: &Repo, id: &str, item: &carvestone_core::Item) -> Resul
     Ok(out)
 }
 
+/// Refuses with one sentence naming every gap of `item`, and `override_command` as the way past them.
+pub(crate) fn refuse_unready(
+    repo: &Repo,
+    label: &str,
+    item: &carvestone_core::Item,
+    override_command: &str,
+) -> Result<(), EngineError> {
+    let gaps = gaps(repo, label, item)?;
+    if gaps.is_empty() {
+        return Ok(());
+    }
+    Err(EngineError::Invalid(format!(
+        "{label} is not ready for in-progress: {}; fix them, or run {override_command}",
+        gaps.join("; ")
+    )))
+}
+
 impl Repo {
     /// What the task still lacks before a Developer can start it; no gaps means it is ready.
     pub fn task_check(&self, input: &str) -> Result<Ready, EngineError> {

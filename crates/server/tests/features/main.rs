@@ -183,7 +183,7 @@ async fn a_patch_and_a_create_save_the_files_the_cli_would_write() {
         Method::PATCH,
         "/api/items/CS-2",
         &[("if-match", &etag)],
-        Some(r#"{"set": {"status": "in-progress"}}"#),
+        Some(r#"{"set": {"status": "in-progress"}, "force": true}"#),
     )
     .await;
     assert_eq!(patched.status, StatusCode::OK);
@@ -328,7 +328,7 @@ async fn errors() {
     let first = task("First", "todo", "");
     store.write("stone/tasks/CS-1.md", &first);
     let app = carvestone_server::router(store.repo());
-    let cases: [Case; 8] = [
+    let cases: [Case; 9] = [
         (
             "get of an unknown id",
             Method::GET,
@@ -388,6 +388,16 @@ async fn errors() {
             StatusCode::UNPROCESSABLE_ENTITY,
             "invalid",
             "the note is empty; write what has to change",
+        ),
+        (
+            "patch of an unready task to in-progress",
+            Method::PATCH,
+            "/api/items/CS-1",
+            &[],
+            Some(r#"{"set": {"status": "in-progress"}}"#),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid",
+            "is not ready for in-progress",
         ),
         (
             "search without a query",

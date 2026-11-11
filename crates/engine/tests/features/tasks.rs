@@ -495,6 +495,52 @@ fn the_ready_check_lists_every_gap() {
         READY.replace("status: todo", "status: in-progress")
     );
     assert!(!repo.move_task("CS-1", "in-progress", false, false).unwrap().changed);
+
+    // `edit --set status=in-progress` goes through the same gate; the gate judges the edited document.
+    let unready = READY.replace("components: [arch/x]\n", "");
+    let start = |force: bool| Edit {
+        set: vec![("status".into(), "in-progress".into())],
+        force,
+        ..Edit::default()
+    };
+    let store = Store::new();
+    store.write("stone/config.yml", "project: t\ntask_prefix: CS\ncode_roots: [src/]\n");
+    store.write("Cargo.toml", "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n");
+    store.write("src/util.rs", "pub fn helper() -> u32 {\n    1\n}\n");
+    store.write("stone/tasks/CS-1.md", &unready);
+    let repo = store.repo();
+    let err = repo.edit("CS-1", &start(false), false).unwrap_err();
+    assert!(matches!(err, EngineError::Invalid(_)), "{err}");
+    let message = err.to_string();
+    assert!(
+        message.starts_with("CS-1 is not ready for in-progress: components is empty"),
+        "{message}"
+    );
+    assert!(
+        message.ends_with("stone edit CS-1 --set status=in-progress --force"),
+        "{message}"
+    );
+    assert_eq!(store.read("stone/tasks/CS-1.md"), unready);
+    repo.edit("CS-1", &start(true), false).unwrap();
+    assert_eq!(
+        store.read("stone/tasks/CS-1.md"),
+        unready.replace("status: todo", "status: in-progress")
+    );
+
+    // One edit that fills the only gap and starts the task passes.
+    store.write("stone/arch/x.md", "---\ntype: container\ntitle: X\n---\n");
+    store.write("stone/tasks/CS-1.md", &unready);
+    let both = Edit {
+        set: vec![
+            ("components".into(), "arch/x".into()),
+            ("status".into(), "in-progress".into()),
+        ],
+        ..Edit::default()
+    };
+    repo.edit("CS-1", &both, false).unwrap();
+    let written = store.read("stone/tasks/CS-1.md");
+    assert!(written.contains("status: in-progress\n"), "{written}");
+    assert!(written.contains("components: [arch/x]\n"), "{written}");
 }
 
 #[test]
