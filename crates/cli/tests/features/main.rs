@@ -154,7 +154,8 @@ fn every_command_answers_on_a_small_store() {
             ),
             (&["link", "CS-1", "docs/guide"], 0, "updated CS-1"),
             (&["task", "next"], 0, "CS-1  high  First task"),
-            (&["task", "move", "CS-1", "in-progress"], 0, "updated CS-1"),
+            (&["task", "check", "CS-1"], 1, "CS-1 is not ready:"),
+            (&["task", "move", "CS-1", "in-progress", "--force"], 0, "updated CS-1"),
             (&["task", "fill-closed"], 0, "0 tasks filled"),
             (&["commit-msg"], 0, "Refs: CS-1"),
             (

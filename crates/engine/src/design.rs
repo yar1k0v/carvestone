@@ -144,7 +144,7 @@ fn start_point(item: &carvestone_core::Item) -> Option<String> {
 }
 
 /// The text of a code span when it reads `path#Symbol`: a path with an extension, a symbol, no spaces.
-fn span_target(span: &str) -> Option<String> {
+pub(crate) fn span_target(span: &str) -> Option<String> {
     let span = span.trim_matches('`').trim();
     let (path, symbol) = span.split_once('#')?;
     (!symbol.is_empty() && path.contains('.') && !span.contains(char::is_whitespace)).then(|| span.to_string())

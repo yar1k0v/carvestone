@@ -186,14 +186,14 @@ fn a_task_moves_from_todo_to_done_and_back() {
     let repo = store.repo();
 
     for status in ["in-progress", "review"] {
-        repo.move_task("CS-1", status, false).unwrap();
+        repo.move_task("CS-1", status, true, false).unwrap();
         assert_eq!(
             store.read("stone/tasks/CS-1.md"),
             TASK.replace("status: todo", &format!("status: {status}"))
         );
     }
 
-    repo.move_task("CS-1", "done", false).unwrap();
+    repo.move_task("CS-1", "done", true, false).unwrap();
     let text = store.read("stone/tasks/CS-1.md");
     assert!(text.contains("\nclosed: 20"), "{text}");
     // `closed` stays a plain day, never a timestamp.
@@ -201,7 +201,7 @@ fn a_task_moves_from_todo_to_done_and_back() {
     assert_eq!(closed.len(), 18, "{closed}");
     assert_eq!(without(&text, "closed:"), TASK.replace("status: todo", "status: done"));
 
-    repo.move_task("CS-1", "in-progress", false).unwrap();
+    repo.move_task("CS-1", "in-progress", true, false).unwrap();
     assert_eq!(
         store.read("stone/tasks/CS-1.md"),
         TASK.replace("status: todo", "status: in-progress")
@@ -338,7 +338,7 @@ fn next_lists_a_task_only_when_its_dependencies_are_done() {
     assert_eq!(ids(5), ["CS-3", "CS-1"]);
     assert_eq!(ids(1), ["CS-3"]);
 
-    repo.move_task("CS-1", "done", false).unwrap();
+    repo.move_task("CS-1", "done", true, false).unwrap();
     assert_eq!(ids(5), ["CS-2", "CS-3"]);
 }
 
@@ -416,6 +416,88 @@ fn fill_closed_writes_the_day_once() {
 }
 
 #[test]
+fn the_ready_check_lists_every_gap() {
+    const READY: &str = "---\ntype: task\ntitle: Ship\nstatus: todo\ncomponents: [arch/x]\npaths: [src/util.rs, src/new.rs]\n---\n\n## Acceptance criteria\n\n- [ ] `cargo test` → 0 failed\n\n## Plan\n\n1. Change `src/util.rs#helper`.\n2. Add `src/new.rs` (new) with `src/new.rs#fresh`.\n";
+    const COMPONENTS: &str = "components is empty; set it with `stone edit CS-1 --set components=<arch id>`";
+    const PATHS: &str = "paths is empty; set it with `stone edit CS-1 --set paths=<file>,<file>`";
+    const NEW_PATH: &str =
+        "path src/new.rs does not exist; fix it in paths, or write it in the plan as a code span followed by (new)";
+    const NO_CRITERION: &str = "no acceptance criterion; add `- [ ]` lines under ## Acceptance criteria";
+    const NO_COMMAND: &str = "criterion 1 carries no command; put the command in a code span";
+    const NO_STEPS: &str = "the plan has no numbered steps; write them under ## Plan";
+    // (what the row shows, the task file, the gaps it must report)
+    let rows: [(&str, String, Vec<&str>); 8] = [
+        ("a ready task", READY.to_string(), vec![]),
+        (
+            "no components",
+            READY.replace("components: [arch/x]\n", ""),
+            vec![COMPONENTS],
+        ),
+        (
+            "empty paths",
+            READY.replace("paths: [src/util.rs, src/new.rs]", "paths: []"),
+            vec![PATHS],
+        ),
+        (
+            "a new file without the mark",
+            READY.replace(" (new)", ""),
+            vec![
+                NEW_PATH,
+                "plan line 16: src/new.rs#fresh names a file the code graph does not hold; fix the path or mark it (new)",
+            ],
+        ),
+        (
+            "a symbol that is gone",
+            READY.replace("#helper", "#gone"),
+            vec![
+                "plan line 15: src/util.rs#gone names a symbol that is not in that file; fix the name or mark it (new)",
+            ],
+        ),
+        (
+            "a criterion without a command",
+            READY.replace("`cargo test`", "cargo test"),
+            vec![NO_COMMAND],
+        ),
+        (
+            "no checkbox",
+            READY.replace("- [ ] `cargo test` → 0 failed\n", ""),
+            vec![NO_CRITERION],
+        ),
+        (
+            "bullets instead of numbered steps",
+            READY.replace("1. ", "- ").replace("2. ", "- "),
+            vec![NO_STEPS],
+        ),
+    ];
+    for (what, file, gaps) in rows {
+        let store = Store::new();
+        store.write("stone/config.yml", "project: t\ntask_prefix: CS\ncode_roots: [src/]\n");
+        store.write("Cargo.toml", "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n");
+        store.write("src/util.rs", "pub fn helper() -> u32 {\n    1\n}\n");
+        store.write("stone/tasks/CS-1.md", &file);
+        let repo = store.repo();
+
+        let found = repo.task_check("CS-1").unwrap();
+        assert_eq!(found.id, "CS-1", "{what}");
+        assert_eq!(found.gaps, gaps, "{what}");
+    }
+
+    // A task without gaps starts, and a second move changes nothing.
+    let store = Store::new();
+    store.write("stone/config.yml", "project: t\ntask_prefix: CS\ncode_roots: [src/]\n");
+    store.write("Cargo.toml", "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n");
+    store.write("src/util.rs", "pub fn helper() -> u32 {\n    1\n}\n");
+    store.write("stone/tasks/CS-1.md", READY);
+    let repo = store.repo();
+    repo.move_task("CS-1", "in-progress", false, false).unwrap();
+    assert_eq!(
+        store.read("stone/tasks/CS-1.md"),
+        READY.replace("status: todo", "status: in-progress")
+    );
+    assert!(!repo.move_task("CS-1", "in-progress", false, false).unwrap().changed);
+}
+
+#[test]
 fn errors() {
     let store = Store::new();
     store.write("stone/tasks/CS-1.md", &TASK.replace("It works.", ""));
@@ -429,30 +511,35 @@ fn errors() {
     );
     let repo = store.repo();
     let before = store.read("stone/tasks/CS-1.md");
-    let cases: [(&str, EngineError, &str); 5] = [
+    let cases: [(&str, EngineError, &str); 6] = [
+        (
+            "unready to in-progress",
+            repo.move_task("CS-1", "in-progress", false, false).unwrap_err(),
+            "CS-1 is not ready for in-progress: components is empty",
+        ),
         (
             "unknown status",
-            repo.move_task("CS-1", "bogus", false).unwrap_err(),
+            repo.move_task("CS-1", "bogus", false, false).unwrap_err(),
             "status `bogus` is not valid for a task; use one of: draft, todo, in-progress, review, done, archived",
         ),
         (
             "unknown task",
-            repo.move_task("CS-99", "done", false).unwrap_err(),
+            repo.move_task("CS-99", "done", false, false).unwrap_err(),
             "CS-99 not found",
         ),
         (
             "done without an outcome",
-            repo.move_task("CS-1", "done", false).unwrap_err(),
+            repo.move_task("CS-1", "done", false, false).unwrap_err(),
             "CS-1 has no ## Outcome; add one with `stone edit CS-1 --section outcome`",
         ),
         (
             "not a task",
-            repo.move_task("ADR-1", "done", false).unwrap_err(),
+            repo.move_task("ADR-1", "done", false, false).unwrap_err(),
             "ADR-1 is not a task",
         ),
         (
             "a plan",
-            repo.move_task("plans/cutover", "done", false).unwrap_err(),
+            repo.move_task("plans/cutover", "done", false, false).unwrap_err(),
             "plans/cutover is a plan, and plans carry no status",
         ),
     ];

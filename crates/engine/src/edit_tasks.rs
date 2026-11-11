@@ -10,6 +10,7 @@ use crate::create::{Written, now, stamp_by, stamp_value};
 use crate::edit::type_of;
 use crate::fields::{SetCtx, apply_set, check_done_sections, check_vocab, sync_closed};
 use crate::query::{ListFilter, ListRow};
+use crate::ready;
 use crate::repo::{EngineError, Repo};
 use crate::work_links::{WorkLinks, tasks};
 
@@ -134,7 +135,9 @@ impl Repo {
         outcome.map_err(not_in_store)
     }
 
-    pub fn move_task(&self, input: &str, status: &str, dry_run: bool) -> Result<Written, EngineError> {
+    /// Sets a task's status. Starting a task (`in-progress`) is refused while the ready check finds
+    /// gaps, unless `force`; a task that is already in progress is not checked again.
+    pub fn move_task(&self, input: &str, status: &str, force: bool, dry_run: bool) -> Result<Written, EngineError> {
         self.update(input, dry_run, |snapshot, entry, doc| {
             let ty = type_of(entry)?;
             if ty == ItemType::Plan {
@@ -150,6 +153,20 @@ impl Repo {
                 });
             }
             check_vocab(&self.store.config, ty, "status", status)?;
+            if status == "in-progress"
+                && !force
+                && doc.get_str("status").as_deref() != Some("in-progress")
+                && let Some(item) = &entry.item
+            {
+                let id = snapshot.label(entry);
+                let gaps = ready::gaps(self, &id, item)?;
+                if !gaps.is_empty() {
+                    return Err(EngineError::Invalid(format!(
+                        "{id} is not ready for in-progress: {}; fix them, or run stone task move {id} in-progress --force",
+                        gaps.join("; ")
+                    )));
+                }
+            }
             if status == "done" {
                 check_done_sections(&self.store.config, &snapshot.label(entry), &doc.body, doc.body_line())?;
             }

@@ -50,6 +50,7 @@ pub mod precedents;
 pub mod product;
 pub mod project_map;
 pub mod query;
+pub mod ready;
 pub mod refresh;
 pub mod remove;
 pub mod rename;

@@ -332,10 +332,15 @@ enum TaskCommand {
     Move {
         id: String,
         status: String,
+        /// Move to in-progress although the ready check finds gaps.
+        #[arg(long)]
+        force: bool,
         /// Print the resulting file and write nothing.
         #[arg(long)]
         dry_run: bool,
     },
+    /// List what a task lacks before a Developer can start it.
+    Check { id: String },
     /// List the tasks that are ready to start.
     Next {
         #[arg(long, default_value_t = 5)]
@@ -1082,16 +1087,40 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             )?;
         }
         Command::Task {
-            command: TaskCommand::Move { id, status, dry_run },
+            command:
+                TaskCommand::Move {
+                    id,
+                    status,
+                    force,
+                    dry_run,
+                },
         } => {
             show(
-                &repo.move_task(&id, &status, dry_run)?,
+                &repo.move_task(&id, &status, force, dry_run)?,
                 Shown::Edited,
                 dry_run,
                 cli.json,
             )?;
             if status == "done" && !dry_run {
                 refresh_native_in_background(&repo);
+            }
+        }
+        Command::Task {
+            command: TaskCommand::Check { id },
+        } => {
+            let found = repo.task_check(&id)?;
+            if cli.json {
+                print!("{}", pretty(&found)?);
+            } else if found.gaps.is_empty() {
+                println!("{} is ready", found.id);
+            } else {
+                println!("{} is not ready:", found.id);
+                for gap in &found.gaps {
+                    println!("- {gap}");
+                }
+            }
+            if !found.gaps.is_empty() {
+                return Ok(ExitCode::FAILURE);
             }
         }
         Command::Task {
