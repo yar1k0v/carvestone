@@ -11,8 +11,18 @@ use crate::repo::Repo;
 
 /// `path` relative to the repo root with `/` separators; `None` when it lies outside the repo.
 pub fn repo_relative(repo: &Repo, path: &Path) -> Option<String> {
+    let root = &repo.store.layout.root;
+    let real_root;
     let rel = if path.is_absolute() {
-        path.strip_prefix(&repo.store.layout.root).ok()?
+        // The watcher reports real paths, and the root may be written through a link (a macOS
+        // temp folder sits behind /var -> /private/var), so the plain strip can miss.
+        match path.strip_prefix(root) {
+            Ok(rel) => rel,
+            Err(_) => {
+                real_root = std::fs::canonicalize(root).ok()?;
+                path.strip_prefix(&real_root).ok()?
+            }
+        }
     } else {
         path
     };
