@@ -26,7 +26,7 @@ The Lead may accept a tiny docs fix itself, as the lead skill defines it, while 
 ## Checks
 
 - `cargo build --features ui` embeds `web/dist`, so run `pnpm --dir web build` first.
-- One cargo process at a time. Redirect its output to a file in `docs/agent-scratch/` and Read the file.
+- One cargo process at a time. Run it as `bash scripts/check.sh <label> <command>`: the script saves the full output in `docs/agent-scratch/<label>.txt` and prints the result lines, so read the file only when those lines are not enough.
 - The same check failing twice: stop and report.
 - Quick: rust-analyzer diagnostics in the main session, `cargo check -p <crate>` in a subagent, `pnpm --dir web typecheck` for `web/`.
 - One topic: `cargo test -p <crate> --test features <topic>::`. ⚠ A filter can match zero tests and still pass, so check the `N passed` line.
