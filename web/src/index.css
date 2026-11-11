@@ -1,0 +1,203 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-st-todo: var(--st-todo);
+  --color-st-draft: var(--st-draft);
+  --color-st-progress: var(--st-progress);
+  --color-st-review: var(--st-review);
+  --color-st-done: var(--st-done);
+  --color-st-blocked: var(--st-blocked);
+  --color-st-archived: var(--st-archived);
+  --color-st-todo-soft: var(--st-todo-soft);
+  --color-st-draft-soft: var(--st-draft-soft);
+  --color-st-progress-soft: var(--st-progress-soft);
+  --color-st-review-soft: var(--st-review-soft);
+  --color-st-done-soft: var(--st-done-soft);
+  --color-st-blocked-soft: var(--st-blocked-soft);
+  --color-st-archived-soft: var(--st-archived-soft);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* Lapis on warm paper; each status is text on its own soft ground. */
+:root {
+  --radius: 0.5rem;
+  --background: #f4f5f3;
+  --foreground: #16191d;
+  --card: #ffffff;
+  --card-foreground: #16191d;
+  --popover: #ffffff;
+  --popover-foreground: #16191d;
+  --primary: #2444b8;
+  --primary-foreground: #ffffff;
+  --secondary: #eceeea;
+  --secondary-foreground: #16191d;
+  --muted: #eceeea;
+  --muted-foreground: #555d66;
+  --accent: #e6eaf8;
+  --accent-foreground: #2444b8;
+  --destructive: #b42318;
+  --border: #dde0dc;
+  --input: #dde0dc;
+  --ring: #2444b8;
+  --sidebar: #ffffff;
+  --st-todo: #4a5159;
+  --st-draft: oklch(0.56 0.015 70);
+  --st-progress: #2444b8;
+  --st-review: #5f3390;
+  --st-done: #1e6b43;
+  --st-blocked: #93320f;
+  --st-archived: #4a5159;
+  --st-todo-soft: #eceeea;
+  --st-draft-soft: #eceeea;
+  --st-progress-soft: #e6eaf8;
+  --st-review-soft: #efe6f7;
+  --st-done-soft: #e3f1e9;
+  --st-blocked-soft: #fbe9e0;
+  --st-archived-soft: #eceeea;
+}
+
+.dark {
+  --background: #111315;
+  --foreground: #eceef0;
+  --card: #1a1d20;
+  --card-foreground: #eceef0;
+  --popover: #1a1d20;
+  --popover-foreground: #eceef0;
+  --primary: #8fb0ff;
+  --primary-foreground: #111315;
+  --secondary: #2c3136;
+  --secondary-foreground: #eceef0;
+  --muted: #2c3136;
+  --muted-foreground: #a0a8b0;
+  --accent: #1f2b47;
+  --accent-foreground: #8fb0ff;
+  --destructive: #f97066;
+  --border: #2c3136;
+  --input: #2c3136;
+  --ring: #8fb0ff;
+  --sidebar: #1a1d20;
+  --st-todo: oklch(0.74 0.015 75);
+  --st-draft: oklch(0.66 0.012 75);
+  --st-progress: oklch(0.8 0.12 78);
+  --st-review: oklch(0.76 0.11 305);
+  --st-done: oklch(0.76 0.11 150);
+  --st-blocked: oklch(0.72 0.15 35);
+  --st-archived: oklch(0.56 0.01 70);
+  --st-todo-soft: color-mix(in oklab, var(--st-todo) 16%, transparent);
+  --st-draft-soft: color-mix(in oklab, var(--st-draft) 16%, transparent);
+  --st-progress-soft: color-mix(in oklab, var(--st-progress) 16%, transparent);
+  --st-review-soft: color-mix(in oklab, var(--st-review) 16%, transparent);
+  --st-done-soft: color-mix(in oklab, var(--st-done) 16%, transparent);
+  --st-blocked-soft: color-mix(in oklab, var(--st-blocked) 16%, transparent);
+  --st-archived-soft: color-mix(in oklab, var(--st-archived) 16%, transparent);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+  h1 {
+    text-wrap: balance;
+    letter-spacing: -0.02em;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 24%, transparent);
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 35%, transparent) transparent;
+  }
+}
+
+@utility eyebrow {
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+
+/* A plain card: a 1px border and no shadow. */
+@utility slab {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -20% 0;
+  }
+}
+
+@keyframes creep {
+  0% {
+    transform: translateX(-100%) scaleX(0.3);
+  }
+  60% {
+    transform: translateX(30%) scaleX(0.6);
+  }
+  100% {
+    transform: translateX(100%) scaleX(0.3);
+  }
+}
+
+@utility skeleton {
+  border-radius: 0.25rem;
+  background: linear-gradient(90deg, var(--muted) 30%, var(--accent) 50%, var(--muted) 70%);
+  background-size: 300% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

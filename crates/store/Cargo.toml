@@ -1,0 +1,22 @@
+[package]
+name = "carvestone-store"
+description = "Carvestone storage: Markdown + YAML frontmatter files in git, Carvestone's own lean schema"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+carvestone-core.workspace = true
+serde_norway.workspace = true
+serde_json = { workspace = true, features = ["preserve_order"] }
+thiserror.workspace = true
+
+# Same as the workspace lints plus no stray prints: output belongs to the CLI.
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+print_stdout = "deny"
+print_stderr = "deny"
+dbg_macro = "deny"

@@ -1,0 +1,285 @@
+//! Changing items: `edit`, and the locked read-modify-write every writer shares.
+
+use carvestone_core::{ItemType, check_box, section_text, sections, set_section};
+use carvestone_store::{Document, Entry, StoreError};
+
+use crate::create::{Written, stamp_by, stamp_value, today};
+use crate::fields::{SetCtx, SetValue, apply_unset, apply_value, check_done_sections, sync_closed};
+use crate::query::etag_of;
+use crate::repo::{EngineError, Repo};
+use crate::resolve::Snapshot;
+
+/// What `stone edit` was asked to change. `section` is a name and its new text.
+#[derive(Debug, Clone, Default)]
+pub struct Edit {
+    pub set: Vec<(String, SetValue)>,
+    pub unset: Vec<String>,
+    pub section: Option<(String, String)>,
+    pub check_ac: Option<usize>,
+    /// One line to add under `## Notes`, dated today.
+    pub note: Option<String>,
+}
+
+/// The item's type, or a pointer to `stone check` when the file has none that is known.
+pub(crate) fn type_of(entry: &Entry) -> Result<ItemType, EngineError> {
+    entry
+        .item
+        .as_ref()
+        .and_then(|item| item.item_type())
+        .ok_or_else(|| EngineError::Invalid(format!("{} has no known `type`; run `stone check`", entry.path)))
+}
+
+impl Repo {
+    /// The one way an existing item is changed: lock, re-read, let `plan` change a copy of the
+    /// document, save only if the text differs. A dry run takes no lock and never saves.
+    pub(crate) fn update<F>(&self, input: &str, dry_run: bool, plan: F) -> Result<Written, EngineError>
+    where
+        F: FnOnce(&Snapshot, &Entry, &mut Document) -> Result<(), EngineError>,
+    {
+        self.update_if(input, dry_run, None, plan)
+    }
+
+    /// `update`, refusing to write when `if_match` is not the etag of the file as it is under the lock.
+    pub(crate) fn update_if<F>(
+        &self,
+        input: &str,
+        dry_run: bool,
+        if_match: Option<&str>,
+        plan: F,
+    ) -> Result<Written, EngineError>
+    where
+        F: FnOnce(&Snapshot, &Entry, &mut Document) -> Result<(), EngineError>,
+    {
+        self.refuse_doc_file(input, false)?;
+        let lock = if dry_run { None } else { Some(self.store.lock()?) };
+        // Read after the lock: what is computed below is never based on an older copy of the file.
+        let snapshot = self.snapshot()?;
+        let (entry, anchor) = snapshot
+            .resolve(input)
+            .map_err(|err| self.refuse_doc_file(input, true).err().unwrap_or(err))?;
+        if let Some(wanted) = if_match
+            && wanted != etag_of(&entry.text)
+        {
+            return Err(EngineError::Conflict(format!(
+                "{} changed on disk; reload",
+                entry.id.as_str()
+            )));
+        }
+        // The scan decodes lossily; saving that text would turn every bad byte into U+FFFD.
+        if anchor.is_none() {
+            let path = self.store.layout.item_path(&entry.id);
+            let bytes = std::fs::read(&path).map_err(|source| {
+                EngineError::from(StoreError::Io {
+                    path: path.display().to_string(),
+                    source,
+                })
+            })?;
+            if std::str::from_utf8(&bytes).is_err() {
+                return Err(EngineError::Invalid(format!(
+                    "{} is not valid UTF-8; nothing was written",
+                    entry.path
+                )));
+            }
+        }
+        if anchor.is_some() {
+            return Err(EngineError::Invalid(format!(
+                "`{input}` names a section; pass the item id and use --section to change a section"
+            )));
+        }
+        let parsed = match &entry.doc {
+            Ok(doc) => doc,
+            Err(e) => {
+                return Err(EngineError::Invalid(format!(
+                    "{} has broken frontmatter ({e}); run `stone check`",
+                    entry.path
+                )));
+            }
+        };
+        if let Some((line, why)) = parsed.subset_problems().into_iter().next() {
+            return Err(EngineError::Invalid(format!(
+                "{}:{line}: {why}; fix it by hand, nothing was written",
+                entry.path
+            )));
+        }
+        let mut doc = parsed.clone();
+        plan(&snapshot, entry, &mut doc)?;
+        let text = doc.to_text();
+        let changed = text != entry.text;
+        if changed && let Some(lock) = &lock {
+            self.store.save(lock, &entry.id, &text)?;
+        }
+        Ok(Written {
+            id: snapshot.label(entry),
+            path: entry.path.clone(),
+            changed,
+            text,
+            warnings: Vec::new(),
+        })
+    }
+}
+
+impl Repo {
+    /// Fails with a plain sentence when `input` names a file in a doc folder, which stone reads
+    /// and never writes. A name with `.md` counts first (a store id is written without it);
+    /// one without it only counts after the store has no item of that name (`not_found`).
+    pub(crate) fn refuse_doc_file(&self, input: &str, not_found: bool) -> Result<(), EngineError> {
+        match self.doc_file_named(input) {
+            Some(doc) if doc.has_ext != not_found => {
+                Err(EngineError::Invalid(if self.store.config.is_doc_folder(&doc.folder) {
+                    format!(
+                        "{} is in {}/, a read-only doc folder: stone reads it for search and links and never writes there; edit the file by hand",
+                        doc.file, doc.folder
+                    )
+                } else {
+                    format!(
+                        "{} is a project file: stone reads it for search and links and never writes it; edit the file by hand",
+                        doc.file
+                    )
+                }))
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+/// `set_section`, except that text the section already holds leaves the body alone.
+fn replace_section(body: &str, name: &str, text: &str) -> String {
+    let flat = |t: &str| t.trim().replace("\r\n", "\n");
+    let name = name.trim();
+    let all = sections(body, 1);
+    let found = all
+        .iter()
+        .find(|s| s.title.eq_ignore_ascii_case(name))
+        .or_else(|| all.iter().find(|s| s.anchor == name.to_lowercase()));
+    if let Some(section) = found {
+        let held = section_text(body, 1, section)
+            .split_once('\n')
+            .map_or("", |(_, rest)| rest);
+        if flat(held) == flat(text) {
+            return body.to_string();
+        }
+    } else if name.eq_ignore_ascii_case("body") {
+        return replace_preamble(body, text);
+    }
+    set_section(body, name, text)
+}
+
+/// Replaces the text before the first heading and keeps every section after it byte for byte.
+/// Text the preamble already holds leaves the body alone.
+fn replace_preamble(body: &str, text: &str) -> String {
+    let eol = if body.contains("\r\n") { "\r\n" } else { "\n" };
+    let end = sections(body, 1).first().map_or(body.len(), |first| {
+        body.split_inclusive('\n')
+            .take(first.start_line - 1)
+            .map(str::len)
+            .sum()
+    });
+    let preamble = &body[..end];
+    if preamble.trim().replace("\r\n", "\n") == text.trim().replace("\r\n", "\n") {
+        return body.to_string();
+    }
+    // The blank lines between the front matter and the text stay as they are.
+    let lead = &preamble[..preamble.len() - preamble.trim_start().len()];
+    let lead = lead.rfind('\n').map_or("", |i| &lead[..=i]);
+    let mut out = format!("{lead}{}{eol}", text.trim().replace("\r\n", "\n").replace('\n', eol));
+    if end < body.len() {
+        out.push_str(eol);
+        out.push_str(&body[end..]);
+    }
+    out
+}
+
+/// Adds `- {day}: {text}` to the end of `## Notes`, or starts the section. Whitespace runs in
+/// `text`, newlines included, become one space, so a comment can never start a heading. A line
+/// the section already holds leaves the body alone.
+fn add_note(body: &str, text: &str, day: &str) -> Result<String, EngineError> {
+    let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if flat.is_empty() {
+        return Err(EngineError::Invalid(
+            "the note is empty; write what has to change".into(),
+        ));
+    }
+    let line = format!("- {day}: {flat}");
+    let all = sections(body, 1);
+    let held = all
+        .iter()
+        .find(|s| s.title.eq_ignore_ascii_case("notes"))
+        .map_or("", |s| {
+            section_text(body, 1, s).split_once('\n').map_or("", |(_, rest)| rest)
+        })
+        .trim();
+    if held.lines().any(|l| l.trim_end() == line) {
+        return Ok(body.to_string());
+    }
+    let next = if held.is_empty() {
+        line
+    } else {
+        format!("{held}\n{line}")
+    };
+    Ok(set_section(body, "Notes", &next))
+}
+
+impl Repo {
+    pub fn edit(&self, input: &str, req: &Edit, dry_run: bool) -> Result<Written, EngineError> {
+        self.edit_if_match(input, req, dry_run, None)
+    }
+
+    /// `edit` that writes only when `if_match` is the etag of the file under the lock.
+    pub fn edit_if_match(
+        &self,
+        input: &str,
+        req: &Edit,
+        dry_run: bool,
+        if_match: Option<&str>,
+    ) -> Result<Written, EngineError> {
+        if req.set.is_empty()
+            && req.unset.is_empty()
+            && req.section.is_none()
+            && req.check_ac.is_none()
+            && req.note.is_none()
+        {
+            return Err(EngineError::Invalid(
+                "nothing to change; pass --set, --unset, --section or --check-ac".into(),
+            ));
+        }
+        self.update_if(input, dry_run, if_match, |snapshot, entry, doc| {
+            let ty = type_of(entry)?;
+            let ctx = SetCtx {
+                snapshot,
+                config: &self.store.config,
+                ty,
+            };
+            let (title, description) = (doc.get_str("title"), doc.get_str("description"));
+            let body = doc.body.clone();
+            let was = doc.get_str("status");
+            for (key, value) in &req.set {
+                apply_value(&ctx, doc, key, value)?;
+            }
+            for key in &req.unset {
+                apply_unset(doc, key)?;
+            }
+            if let Some((name, text)) = &req.section {
+                doc.body = replace_section(&doc.body, name, text);
+            }
+            if let Some(n) = req.check_ac {
+                doc.body = check_box(&doc.body, "Acceptance criteria", n)?;
+            }
+            if let Some(text) = &req.note {
+                doc.body = add_note(&doc.body, text, &today())?;
+            }
+            if ty == ItemType::Task {
+                sync_closed(&ctx, doc, was.as_deref())?;
+            }
+            let is_done = ty == ItemType::Task && doc.get_str("status").as_deref() == Some("done");
+            if is_done {
+                check_done_sections(&self.store.config, &snapshot.label(entry), &doc.body, doc.body_line())?;
+            }
+            let touched =
+                doc.get_str("title") != title || doc.get_str("description") != description || doc.body != body;
+            if touched {
+                doc.set("generated", stamp_value(&stamp_by(self)?, &today()))?;
+            }
+            Ok(())
+        })
+    }
+}

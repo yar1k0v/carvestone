@@ -1,0 +1,8 @@
+- symbol: order::total
+  sites: ["src/checkout.rs:1", "src/checkout.rs:6"]
+- symbol: order::Order::new
+  sites: ["src/checkout.rs:4"]
+- symbol: order::Order::place
+  sites: ["src/checkout.rs:5"]
+- symbol: order::Order
+  sites: ["src/checkout.rs:1"]

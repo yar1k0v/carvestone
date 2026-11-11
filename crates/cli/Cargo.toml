@@ -1,0 +1,32 @@
+[package]
+name = "carvestone-cli"
+description = "Carvestone command-line interface (primary agent interface)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "stone"
+path = "src/main.rs"
+
+[features]
+# The release build turns this on so `stone serve` carries the web UI.
+ui = ["carvestone-server/ui"]
+
+[dependencies]
+carvestone-core.workspace = true
+carvestone-engine.workspace = true
+carvestone-mcp.workspace = true
+carvestone-server.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true
+
+[build-dependencies]
+ico = "0.6.0"
+winresource = "0.1.34"

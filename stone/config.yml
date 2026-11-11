@@ -1,0 +1,13 @@
+project: carvestone
+task_prefix: CS
+statuses: [draft, todo, in-progress, review, done, archived]
+milestone_statuses: [planned, active, done]
+plan_statuses: [draft, active, done]
+decision_statuses: [proposed, accepted, superseded]
+task_kinds: [feature, chore, spike, bug]
+priorities: [high, medium, low]
+definition_of_done:
+  - cargo fmt --check, cargo clippy -D warnings and cargo test pass
+  - Docs in stone/ touched by the change are updated or confirmed
+  - "## Outcome says what was done and what was learned"
+code_roots: [crates/, web/]

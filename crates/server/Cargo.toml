@@ -1,0 +1,29 @@
+[package]
+name = "carvestone-server"
+description = "Carvestone HTTP server: the engine as a JSON API for the web UI."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+# Serves the built `web/dist` from the binary; without it `/` is a placeholder page.
+ui = ["dep:rust-embed"]
+
+[dependencies]
+carvestone-engine.workspace = true
+axum.workspace = true
+futures-util.workspace = true
+notify.workspace = true
+rust-embed = { workspace = true, optional = true }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "net", "signal", "time", "sync"] }
+tower.workspace = true
+
+[dev-dependencies]
+http-body-util.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

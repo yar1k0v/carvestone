@@ -1,0 +1,60 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo test:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(cargo fmt:*)",
+      "Bash(cargo run:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo check:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git show:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git --no-optional-locks:*)",
+      "Bash(target/debug/stone.exe:*)",
+      "PowerShell(target/debug/stone.exe:*)"
+    ],
+    "deny": [
+      "Edit(/stone/**)",
+      "Edit(/.stone/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^(Read|Write|Edit|MultiEdit|NotebookEdit|Glob|Grep|Bash|PowerShell)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/stone-guard.mjs"
+            ],
+            "timeout": 10,
+            "onFailure": "block",
+            "statusMessage": "stone guard"
+          }
+        ]
+      },
+      {
+        "matcher": "^Grep$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/code-search-guard.mjs"
+            ],
+            "timeout": 10,
+            "statusMessage": "code search guard"
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "typescript-lsp@claude-plugins-official": true
+  }
+}

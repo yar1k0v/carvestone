@@ -1,0 +1,4 @@
+- symbol: Shop.OrderService.Place
+  sites: ["Shop/Checkout.cs:5", "Shop/Rush.cs:4"]
+- symbol: Shop.OrderService
+  sites: ["Shop/Checkout.cs:4", "Shop/Rush.cs:2"]

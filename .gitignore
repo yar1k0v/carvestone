@@ -1,0 +1,12 @@
+/target
+/build/
+/.stone/
+/.planning/
+/web/node_modules
+/web/dist
+/web/src/routeTree.gen.ts
+docs/agent-scratch/
+/.claude/worktrees/
+/.claude/settings.local.json
+/node_modules/
+/.playwright-cli/

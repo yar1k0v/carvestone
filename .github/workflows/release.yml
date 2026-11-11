@@ -1,0 +1,71 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  # The UI is built once; each platform embeds the same web/dist through the `ui` feature.
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm --dir web install --frozen-lockfile
+      - run: pnpm --dir web build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+  build:
+    needs: web
+    strategy:
+      matrix:
+        include:
+          - { os: ubuntu-latest, name: stone-linux, file: stone }
+          - { os: macos-latest, name: stone-macos, file: stone }
+          - { os: windows-latest, name: stone-windows.exe, file: stone.exe }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag matches the Cargo.toml version
+        shell: bash
+        run: |
+          version=$(grep -m1 -E '^version = "' Cargo.toml | sed -E 's/^version = "([^"]+)"$/\1/')
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$tag" != "$version" ]; then
+            echo "Tag $GITHUB_REF_NAME is $tag, but Cargo.toml is at $version. Run scripts/build.sh with a bump, commit it, and tag again." >&2
+            exit 1
+          fi
+      - uses: dtolnay/rust-toolchain@1.89
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+      - run: cargo build --release -p carvestone-cli --features ui
+      - run: cp target/release/${{ matrix.file }} ${{ matrix.name }}
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.name }}
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: stone-*
+          path: bin
+          merge-multiple: true
+      - run: gh release create "$GITHUB_REF_NAME" bin/* --repo "$GITHUB_REPOSITORY" --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

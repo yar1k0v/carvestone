@@ -1,0 +1,80 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/store",
+    "crates/index",
+    "crates/graph",
+    "crates/git",
+    "crates/engine",
+    "crates/cli",
+    "crates/mcp",
+    "crates/server",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/yar1k0v/carvestone"
+
+[workspace.dependencies]
+carvestone-core = { path = "crates/core" }
+carvestone-store = { path = "crates/store" }
+carvestone-index = { path = "crates/index" }
+carvestone-graph = { path = "crates/graph" }
+carvestone-git = { path = "crates/git" }
+carvestone-engine = { path = "crates/engine" }
+carvestone-mcp = { path = "crates/mcp" }
+carvestone-server = { path = "crates/server" }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+futures-util = { version = "0.3", default-features = false }
+notify = "8"
+rust-embed = { version = "8", features = ["mime-guess"] }
+ts-rs = { version = "12", features = ["serde-json-impl"] }
+rmcp = { version = "=3.7.0", default-features = false, features = ["server", "transport-io"] }
+schemars = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["rt", "io-std", "io-util", "macros", "sync"] }
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_norway = "0.9"
+clap = { version = "4", features = ["derive"] }
+globset = "0.4"
+rusqlite = { version = "0.32", features = ["bundled"] }
+blake3 = "1"
+tree-sitter = "0.26"
+tree-sitter-c-sharp = "0.23"
+tree-sitter-rust = "0.24"
+tree-sitter-typescript = "0.23"
+tree-sitter-javascript = "0.25"
+tree-sitter-python = "0.25"
+tree-sitter-dart = "0.3.0"
+petgraph = "0.8"
+protobuf = "3"
+scip = "0.10"
+rayon = "1"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+# Tests relink in about half the time with less debug info for our code, and dependencies built
+# with optimisation (SQLite and tree-sitter are C and most of what the tests run) cost nothing
+# at run time. Measured in CS-131.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

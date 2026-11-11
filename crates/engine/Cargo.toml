@@ -1,0 +1,42 @@
+[package]
+name = "carvestone-engine"
+description = "Carvestone operations over the store: read, check, create, edit. Every adapter (CLI, MCP, HTTP) calls this."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+carvestone-core.workspace = true
+carvestone-store.workspace = true
+carvestone-index.workspace = true
+carvestone-graph.workspace = true
+carvestone-git.workspace = true
+blake3.workspace = true
+globset.workspace = true
+petgraph.workspace = true
+rayon.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_norway.workspace = true
+thiserror.workspace = true
+ts-rs = { workspace = true, optional = true }
+
+[dev-dependencies]
+# `code_native` writes an index with an extra relationship, which rust-analyzer does not emit.
+protobuf.workspace = true
+scip.workspace = true
+
+[features]
+# Derives the TypeScript bindings of every API struct; `tests/ts_export.rs` writes them.
+ts = ["dep:ts-rs", "carvestone-core/ts"]
+
+# Same as the workspace lints plus no stray prints: output belongs to the CLI.
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+print_stdout = "deny"
+print_stderr = "deny"
+dbg_macro = "deny"

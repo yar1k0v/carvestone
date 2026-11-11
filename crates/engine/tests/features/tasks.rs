@@ -1,0 +1,392 @@
+//! Tasks: moving a task through its statuses, ticking its criteria and finding the next ready task.
+
+use carvestone_engine::EngineError;
+use carvestone_engine::edit::Edit;
+use carvestone_engine::query::{GetResult, ListFilter};
+
+use crate::support::Store;
+
+const TASK: &str = "---\ntype: task\ntitle: Ship\nstatus: todo\npriority: high\n---\n\n## Description\n\nText.\n\n## Acceptance criteria\n\n- [ ] one\n- [ ] two\n\n## Outcome\n\nIt works.\n";
+
+/// The text without lines that start with `prefix`, for dates that change every day.
+fn without(text: &str, prefix: &str) -> String {
+    text.split_inclusive('\n')
+        .filter(|line| !line.starts_with(prefix))
+        .collect()
+}
+
+fn task(status: &str, priority: &str, depends_on: &str) -> String {
+    format!("---\ntype: task\ntitle: T\nstatus: {status}\npriority: {priority}\ndepends_on: [{depends_on}]\n---\n")
+}
+
+#[test]
+fn list_rows_carry_what_a_board_card_shows() {
+    let store = Store::new();
+    store.write(
+        "stone/tasks/CS-1.md",
+        "---\ntype: task\ntitle: Full\nstatus: todo\ncreated: 2026-11-01\ncomponents: [arch/acme/web/ui, arch/acme/api/auth, arch/acme/api/login]\n---\n\n## Description\n\n- [x] not a criterion\n\n## Acceptance criteria\n\n- [x] one\n- [ ] two\n",
+    );
+    store.write(
+        "stone/tasks/CS-2.md",
+        "---\ntype: task\ntitle: Bare\nstatus: todo\n---\n",
+    );
+    store.write("stone/arch/acme.md", "---\ntype: system\ntitle: Acme\n---\n");
+    store.write("stone/arch/acme/api.md", "---\ntype: container\ntitle: Api\n---\n");
+    store.write("stone/arch/acme/web.md", "---\ntype: container\ntitle: Web\n---\n");
+    for (path, title) in [("api/auth", "Auth"), ("api/login", "Login"), ("web/ui", "Ui")] {
+        store.write(
+            &format!("stone/arch/acme/{path}.md"),
+            &format!("---\ntype: component\ntitle: {title}\n---\n"),
+        );
+    }
+
+    let filter = ListFilter {
+        item_type: Some("task".to_string()),
+        ..ListFilter::default()
+    };
+    let rows = store.repo().list(&filter).unwrap();
+    let facts = |n: usize| {
+        let row = &rows[n];
+        (
+            row.created.clone(),
+            row.criteria_done,
+            row.criteria_total,
+            row.services.clone(),
+        )
+    };
+    assert_eq!(
+        facts(0),
+        (
+            Some("2026-11-01".to_string()),
+            Some(1),
+            Some(2),
+            vec!["Web".to_string(), "Api".to_string()]
+        )
+    );
+    assert_eq!(facts(1), (None, None, None, Vec::new()));
+}
+
+#[test]
+fn the_list_gives_a_plan_its_created_day() {
+    let store = Store::new();
+    store.write(
+        "stone/plans/dated.md",
+        "---\ntype: plan\ntitle: Dated\nstatus: active\ncreated: 2026-10-26\n---\n",
+    );
+    store.write(
+        "stone/plans/undated.md",
+        "---\ntype: plan\ntitle: Undated\nstatus: draft\n---\n",
+    );
+    store.write(
+        "stone/docs/setup.md",
+        "---\ntype: doc\ntitle: Setup\ncreated: 2026-10-26\n---\n",
+    );
+
+    let rows = store.repo().list(&ListFilter::default()).unwrap();
+    let created = |title: &str| {
+        rows.iter()
+            .find(|row| row.title.as_deref() == Some(title))
+            .unwrap_or_else(|| panic!("{title} is listed"))
+            .created
+            .clone()
+    };
+    assert_eq!(created("Dated"), Some("2026-10-26".to_string()));
+    assert_eq!(created("Undated"), None);
+    assert_eq!(created("Setup"), None);
+}
+
+#[test]
+fn get_gives_the_criteria_and_outcome_the_card_counts() {
+    let store = Store::new();
+    store.write(
+        "stone/tasks/CS-1.md",
+        r#"---
+type: task
+title: Deep
+status: todo
+---
+
+## Acceptance criteria
+
+- [x] one
+* [ ] star
++ [x] plus
+
+### Edge cases
+
+- [ ] under a sub-heading
+
+````text
+```
+## x
+- [ ] fenced
+````
+
+- [ ] after the fence
+
+## Outcome
+
+It works.
+
+### Details
+
+More text.
+
+````text
+```
+## x
+````
+"#,
+    );
+    store.write(
+        "stone/tasks/CS-2.md",
+        "---\ntype: task\ntitle: Empty\nstatus: todo\n---\n\n## Outcome\n\n\n",
+    );
+    let repo = store.repo();
+
+    let GetResult::Item(view) = repo.get("CS-1").unwrap() else {
+        panic!("CS-1 is an item");
+    };
+    let boxes: Vec<_> = view
+        .criteria
+        .iter()
+        .map(|c| (c.n, c.text.as_str(), c.checked))
+        .collect();
+    assert_eq!(
+        boxes,
+        [
+            (1, "one", true),
+            (2, "under a sub-heading", false),
+            (3, "after the fence", false)
+        ]
+    );
+    assert_eq!(
+        view.outcome.as_deref(),
+        Some("It works.\n\n### Details\n\nMore text.\n\n````text\n```\n## x\n````")
+    );
+
+    let filter = ListFilter {
+        item_type: Some("task".to_string()),
+        ..ListFilter::default()
+    };
+    let rows = repo.list(&filter).unwrap();
+    assert_eq!((rows[0].criteria_done, rows[0].criteria_total), (Some(1), Some(3)));
+
+    let GetResult::Item(empty) = repo.get("CS-2").unwrap() else {
+        panic!("CS-2 is an item");
+    };
+    assert!(empty.criteria.is_empty());
+    assert_eq!(empty.outcome, None);
+}
+
+#[test]
+fn a_task_moves_from_todo_to_done_and_back() {
+    let store = Store::new();
+    store.write("stone/tasks/CS-1.md", TASK);
+    let repo = store.repo();
+
+    for status in ["in-progress", "review"] {
+        repo.move_task("CS-1", status, false).unwrap();
+        assert_eq!(
+            store.read("stone/tasks/CS-1.md"),
+            TASK.replace("status: todo", &format!("status: {status}"))
+        );
+    }
+
+    repo.move_task("CS-1", "done", false).unwrap();
+    let text = store.read("stone/tasks/CS-1.md");
+    assert!(text.contains("\nclosed: 20"), "{text}");
+    assert_eq!(without(&text, "closed:"), TASK.replace("status: todo", "status: done"));
+
+    repo.move_task("CS-1", "in-progress", false).unwrap();
+    assert_eq!(
+        store.read("stone/tasks/CS-1.md"),
+        TASK.replace("status: todo", "status: in-progress")
+    );
+}
+
+#[test]
+fn ticking_a_criterion_changes_only_that_box() {
+    let store = Store::new();
+    store.write("stone/tasks/CS-1.md", TASK);
+    let repo = store.repo();
+
+    let tick = Edit {
+        check_ac: Some(2),
+        ..Edit::default()
+    };
+    repo.edit("CS-1", &tick, false).unwrap();
+    assert_eq!(
+        without(&store.read("stone/tasks/CS-1.md"), "generated:"),
+        TASK.replace("- [ ] two", "- [x] two")
+    );
+}
+
+#[test]
+fn a_note_lands_under_notes_once() {
+    let day = carvestone_engine::create::today();
+    let with_notes = TASK.replace("## Outcome", "## Notes\n\n- 2026-01-01: old\n\n## Outcome");
+    let crlf = TASK.replace('\n', "\r\n");
+    // (what the row shows, the file, the note, the file after the edit, or the error sentence)
+    let rows: [(&str, String, &str, Result<String, &str>); 5] = [
+        (
+            "no Notes section",
+            TASK.to_string(),
+            "Sent back: fix the title",
+            Ok(format!("{TASK}\n## Notes\n\n- {day}: Sent back: fix the title\n")),
+        ),
+        (
+            "a Notes section with another section after it",
+            with_notes.clone(),
+            "Sent back: fix the title",
+            Ok(with_notes.replace(
+                "- 2026-01-01: old\n",
+                &format!("- 2026-01-01: old\n- {day}: Sent back: fix the title\n"),
+            )),
+        ),
+        (
+            "a CRLF file",
+            crlf.clone(),
+            "Sent back: fix the title",
+            Ok(format!(
+                "{crlf}\r\n## Notes\r\n\r\n- {day}: Sent back: fix the title\r\n"
+            )),
+        ),
+        (
+            "a comment with a newline and a heading",
+            TASK.to_string(),
+            "first\n## x\n\nsecond",
+            Ok(format!("{TASK}\n## Notes\n\n- {day}: first ## x second\n")),
+        ),
+        (
+            "a blank comment",
+            TASK.to_string(),
+            " \n\t ",
+            Err("the note is empty; write what has to change"),
+        ),
+    ];
+    for (what, file, note, expected) in rows {
+        let store = Store::new();
+        store.write("stone/tasks/CS-1.md", &file);
+        let repo = store.repo();
+        let req = Edit {
+            note: Some(note.to_string()),
+            ..Edit::default()
+        };
+        match expected {
+            Ok(text) => {
+                repo.edit("CS-1", &req, false).unwrap();
+                let saved = store.read("stone/tasks/CS-1.md");
+                assert_eq!(without(&saved, "generated:"), text, "{what}");
+                // The same write twice gives no diff.
+                let again = repo.edit("CS-1", &req, false).unwrap();
+                assert!(!again.changed, "{what}");
+                assert_eq!(store.read("stone/tasks/CS-1.md"), saved, "{what}");
+            }
+            Err(sentence) => {
+                let err = repo.edit("CS-1", &req, false).unwrap_err();
+                assert_eq!(err.to_string(), sentence, "{what}");
+                assert_eq!(store.read("stone/tasks/CS-1.md"), file, "{what}");
+            }
+        }
+    }
+}
+
+#[test]
+fn next_lists_a_task_only_when_its_dependencies_are_done() {
+    let store = Store::new();
+    store.write("stone/tasks/CS-1.md", &TASK.replace("priority: high", "priority: low"));
+    store.write("stone/tasks/CS-2.md", &task("todo", "high", "CS-1"));
+    store.write("stone/tasks/CS-3.md", &task("todo", "medium", "CS-4"));
+    store.write("stone/tasks/CS-4.md", &task("done", "low", ""));
+    store.write("stone/tasks/CS-5.md", &task("in-progress", "high", ""));
+    store.write("stone/tasks/CS-6.md", &task("todo", "high", "CS-99"));
+    store.write("stone/tasks/CS-7.md", &task("todo", "high", "CS-8"));
+    store.write("stone/tasks/CS-8.md", &task("review", "low", ""));
+    let repo = store.repo();
+
+    let ids = |limit| -> Vec<String> {
+        repo.next(limit)
+            .unwrap()
+            .into_iter()
+            .map(|row| row.short.unwrap())
+            .collect()
+    };
+    assert_eq!(ids(5), ["CS-3", "CS-1"]);
+    assert_eq!(ids(1), ["CS-3"]);
+
+    repo.move_task("CS-1", "done", false).unwrap();
+    assert_eq!(ids(5), ["CS-2", "CS-3"]);
+}
+
+#[test]
+fn fill_closed_writes_the_day_once() {
+    let store = Store::new();
+    let done = "---\ntype: task\ntitle: Ship\nstatus: done\n---\n";
+    let archived = "---\ntype: task\ntitle: Old\nstatus: archived\n---\n";
+    store.write("stone/tasks/CS-1.md", done);
+    store.write("stone/tasks/CS-2.md", archived);
+    store.git_commit("chore: scaffold", "2026-09-01T09:00:00+00:00");
+    // The newest commit that names the task gives the day, not the commit that added its file.
+    store.write("src/lib.rs", "pub fn ship() {}\n");
+    store.git_commit("fix: ship it (CS-1)", "2026-10-01T09:00:00+00:00");
+    let repo = store.repo();
+
+    let first = repo.fill_closed(false).unwrap();
+    assert_eq!(first.len(), 1);
+    let text = store.read("stone/tasks/CS-1.md");
+    assert!(text.contains("\nclosed: 2026-10-01\n"), "{text}");
+    assert_eq!(without(&text, "closed:"), done);
+    assert_eq!(store.read("stone/tasks/CS-2.md"), archived);
+
+    let second = repo.fill_closed(false).unwrap();
+    assert!(second.is_empty(), "{second:?}");
+    assert_eq!(store.read("stone/tasks/CS-1.md"), text);
+}
+
+#[test]
+fn errors() {
+    let store = Store::new();
+    store.write("stone/tasks/CS-1.md", &TASK.replace("It works.", ""));
+    store.write(
+        "stone/decisions/ADR-1.md",
+        "---\ntype: decision\ntitle: Pick\nstatus: accepted\n---\n",
+    );
+    store.write(
+        "stone/plans/cutover.md",
+        "---\ntype: plan\ntitle: Cutover\nstatus: active\n---\n",
+    );
+    let repo = store.repo();
+    let before = store.read("stone/tasks/CS-1.md");
+    let cases: [(&str, EngineError, &str); 5] = [
+        (
+            "unknown status",
+            repo.move_task("CS-1", "bogus", false).unwrap_err(),
+            "status `bogus` is not valid for a task; use one of: draft, todo, in-progress, review, done, archived",
+        ),
+        (
+            "unknown task",
+            repo.move_task("CS-99", "done", false).unwrap_err(),
+            "CS-99 not found",
+        ),
+        (
+            "done without an outcome",
+            repo.move_task("CS-1", "done", false).unwrap_err(),
+            "CS-1 has no ## Outcome; add one with `stone edit CS-1 --section outcome`",
+        ),
+        (
+            "not a task",
+            repo.move_task("ADR-1", "done", false).unwrap_err(),
+            "ADR-1 is not a task",
+        ),
+        (
+            "a plan",
+            repo.move_task("plans/cutover", "done", false).unwrap_err(),
+            "plans/cutover is a plan, and plans carry no status",
+        ),
+    ];
+    for (what, err, want) in cases {
+        assert!(err.to_string().contains(want), "{what}: {err}");
+    }
+    assert_eq!(store.read("stone/tasks/CS-1.md"), before);
+}

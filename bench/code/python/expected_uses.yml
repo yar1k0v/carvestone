@@ -1,0 +1,6 @@
+- symbol: shop.order.total
+  sites: ["shop/checkout.py:1", "shop/checkout.py:7"]
+- symbol: shop.order.Order.place
+  sites: ["shop/checkout.py:6"]
+- symbol: shop.order.Order
+  sites: ["shop/checkout.py:1", "shop/checkout.py:5"]

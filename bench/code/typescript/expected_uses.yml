@@ -1,0 +1,6 @@
+- symbol: src/order::total
+  sites: ["checkout.ts:1", "checkout.ts:6"]
+- symbol: src/order::Order.place
+  sites: ["checkout.ts:5"]
+- symbol: src/order::Order
+  sites: ["checkout.ts:1", "checkout.ts:4"]
