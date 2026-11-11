@@ -87,10 +87,22 @@ fn errors() {
     store.write("stone/tasks/CS-1.md", "---\ntype: task\ntitle: A\nstatus: todo\n---\n");
     store.write("taken/keep.txt", "mine");
     let repo = store.repo();
-    fs::create_dir_all(store.path(".stone")).unwrap();
     let taken = store.path("taken");
     let not_empty = "is not empty; export into a new or empty folder";
     let in_store = "is inside the store; export into a folder outside stone/ and .stone/";
+    // A fresh clone has no `.stone` yet, and the file system then cannot say which names mean it
+    // unless it is asked with the store folder that exists.
+    assert!(!store.path(".stone").exists(), "opening the store made .stone");
+    if store.path("STONE").exists() {
+        let folder = store.path(".STONE/out");
+        let err = repo.export_okf(&folder).unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::Invalid, "other case before .stone exists");
+        assert_eq!(err.to_string(), format!("{} {in_store}", folder.display()));
+        for gone in [".STONE", ".stone"] {
+            assert!(!store.path(gone).exists(), "{gone}");
+        }
+    }
+    fs::create_dir_all(store.path(".stone")).unwrap();
     let mut cases = vec![
         ("folder with a file", taken.clone(), not_empty),
         ("inside stone/", store.path("stone/out"), in_store),

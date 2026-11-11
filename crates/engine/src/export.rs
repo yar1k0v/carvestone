@@ -145,6 +145,36 @@ fn real_path(path: &Path) -> PathBuf {
     real
 }
 
+/// Whether the file system ignores letter case, asked with a folder that exists: the same path
+/// with its last part in the other case still exists.
+fn ignores_case(existing: &Path) -> bool {
+    let Some(name) = existing.file_name().and_then(OsStr::to_str) else {
+        return false;
+    };
+    let flipped: String = name
+        .chars()
+        .flat_map(|c| {
+            if c.is_lowercase() {
+                c.to_uppercase().collect::<Vec<_>>()
+            } else {
+                c.to_lowercase().collect()
+            }
+        })
+        .collect();
+    flipped != name && existing.with_file_name(flipped).exists()
+}
+
+/// Whether the first part of `target` under `root` reads `.stone` in any letter case.
+fn starts_with_derived_dir(target: &Path, root: &Path) -> bool {
+    let Ok(rest) = target.strip_prefix(root) else {
+        return false;
+    };
+    matches!(
+        rest.components().next(),
+        Some(Component::Normal(name)) if name.to_string_lossy().to_lowercase() == ".stone"
+    )
+}
+
 impl Repo {
     /// Writes the copy into `folder`, which must be new or empty and outside the store. Nothing in
     /// the store is written, so no lock is taken.
@@ -155,8 +185,13 @@ impl Repo {
             source,
         })?;
         let target = real_path(&absolute);
-        if target.starts_with(real_path(&layout.data_dir)) || target.starts_with(real_path(&layout.root.join(".stone")))
-        {
+        let data_dir = real_path(&layout.data_dir);
+        let root = real_path(&layout.root);
+        let derived = real_path(&layout.root.join(".stone"));
+        // A missing `.stone` leaves any letter case of it as written, so the data folder, which
+        // exists, tells whether this file system treats the cases as one name.
+        let other_case = !derived.exists() && ignores_case(&data_dir) && starts_with_derived_dir(&target, &root);
+        if target.starts_with(&data_dir) || target.starts_with(&derived) || other_case {
             return Err(EngineError::Invalid(format!(
                 "{} is inside the store; export into a folder outside stone/ and .stone/",
                 folder.display()
