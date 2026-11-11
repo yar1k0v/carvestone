@@ -220,7 +220,9 @@ pub(crate) fn command_error(args: &[&str], out: &Output) -> GitError {
 }
 
 fn is_not_a_repo(stderr: &str) -> bool {
-    stderr.contains("not a git repository") || stderr.contains("cannot change to")
+    stderr.contains("not a git repository")
+        || stderr.contains("cannot change to")
+        || stderr.contains("does not point to a valid repository")
 }
 
 fn spawn_error(args: &[&str], err: &std::io::Error) -> GitError {
@@ -296,4 +298,28 @@ fn parse_version(text: &str) -> Option<(u32, u32)> {
     let version = text.split_whitespace().nth(2)?;
     let mut parts = version.split('.');
     Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_not_a_repo;
+
+    #[test]
+    fn not_a_repo_wordings() {
+        let rows = [
+            (
+                "fatal: not a git repository (or any of the parent directories): .git",
+                true,
+            ),
+            ("fatal: cannot change to 'portal': No such file or directory", true),
+            (
+                "fatal: gitfile does not point to a valid repository: /tmp/x/portal/.git",
+                true,
+            ),
+            ("fatal: bad revision 'nope'", false),
+        ];
+        for (stderr, expected) in rows {
+            assert_eq!(is_not_a_repo(stderr), expected, "{stderr}");
+        }
+    }
 }
