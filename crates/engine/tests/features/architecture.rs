@@ -798,7 +798,7 @@ fn gaps_list_what_the_design_lacks_with_the_next_command_and_skip_what_is_comple
     assert_eq!(
         got,
         [
-            (GapKind::NoCode, "arch/shop/ghost", "stone map --write"),
+            (GapKind::NoCode, "arch/shop/ghost", "stone arch map --write"),
             (GapKind::UnownedCode, "arch/scan/demo-src-7bb69d.md", "stone scan"),
             (
                 GapKind::NoConnection,

@@ -20,6 +20,7 @@ Status: live (read surface changes planned, ADR-21)
 - A hit costs about 40 tokens. `--budget N` caps the output. `stone get <id>#<anchor>` expands one section.
 - `stone instructions [topic]` prints a guide: overview, plan, do, finish, debug or design.
 - `stone instructions --write` adds the Stone block to `CLAUDE.md` or `AGENTS.md`.
+- `stone init` offers a Claude Code SessionStart hook that prints `stone map`; `stone map --install-hook` adds it later. The Stone block tells other agents to run `stone map` first.
 - `stone mcp` serves `search`, `get`, `list` and `code` over MCP, for clients that cannot run a shell. Nothing turns it on by default.
 - Writes always go through the CLI. An agent edit is stamped as the agent.
 - Library lookups go to Docs MCP (`search_docs`), using the `libraries` of a component.
@@ -28,6 +29,7 @@ Status: live (read surface changes planned, ADR-21)
 
 | Command | Purpose |
 | --- | --- |
+| `stone map` | Print the project at the start of a session, within 600 tokens |
 | `stone search <words>` | Find sections by words, with `--from`, `--component`, `--type`, `--limit` and `--budget` |
 | `stone get <id>[#<anchor>]` | Print an item or one section |
 | `stone list` | List items, filtered by type, status, milestone or component |
@@ -53,7 +55,7 @@ Status: live (read surface changes planned, ADR-21)
 | Wrong and empty answers fixed | planned | [[CS-230]], [[CS-223]] |
 | `--budget` on every read command | planned | [[CS-229]] |
 | Output tiers: Stone decides the size of an answer | planned | [[CS-232]] |
-| Project map at the start of a session | planned | [[CS-231]] |
+| Project map at the start of a session | live | [[CS-231]] |
 | Task brief and task pack: `stone brief` | planned | [[CS-202]] |
 | Ready check before a task counts as ready | planned | [[CS-233]] |
 | Agent guide with two pushes, two pulls and the writes | planned | [[CS-234]] |

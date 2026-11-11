@@ -340,6 +340,54 @@ fn next_lists_a_task_only_when_its_dependencies_are_done() {
 }
 
 #[test]
+fn the_project_map_lists_parts_review_ready_and_progress() {
+    let store = Store::new();
+    store.write("stone/config.yml", "project: t\ntask_prefix: CS\ncode_roots: [src/]\n");
+    // The derived index is not source; a store made by `init` ignores it the same way.
+    store.write(".gitignore", "/.stone/\n");
+    store.write(
+        "stone/arch/app.md",
+        "---\ntype: container\ntitle: App\ncode: ['src/**']\n---\n",
+    );
+    store.write("src/main.rs", "fn main() {}\n");
+    store.write(
+        "stone/milestones/M-1.md",
+        "---\ntype: milestone\ntitle: First\nstatus: planned\n---\n",
+    );
+    let task = |title: &str, status: &str, depends_on: &str| {
+        format!("---\ntype: task\ntitle: {title}\nstatus: {status}\nmilestone: M-1\ndepends_on: [{depends_on}]\n---\n")
+    };
+    store.write("stone/tasks/CS-1.md", &task("Done", "done", ""));
+    store.write("stone/tasks/CS-2.md", &task("Old", "archived", ""));
+    store.write("stone/tasks/CS-3.md", &task("Check", "review", ""));
+    store.write("stone/tasks/CS-4.md", &task("Free", "todo", ""));
+    store.write("stone/tasks/CS-5.md", &task("Blocked", "todo", "CS-4"));
+
+    let repo = store.repo();
+    let map = repo.project_map().unwrap();
+    assert_eq!(map.project, "t");
+    assert_eq!(map.git, None);
+    let ids = |rows: &[carvestone_engine::project_map::MapTask]| -> Vec<String> {
+        rows.iter().map(|row| row.id.clone()).collect()
+    };
+    assert_eq!(ids(&map.review), ["CS-3"]);
+    assert_eq!(ids(&map.ready), ["CS-4"]);
+    assert_eq!(map.ready_total, 1);
+    let milestone = (map.milestones[0].done, map.milestones[0].total);
+    assert_eq!(map.milestones.len(), 1);
+    assert_eq!(milestone, (1, 4));
+    assert_eq!(map.components.len(), 1);
+    assert_eq!(map.components[0].code, ["src/**"]);
+    assert_eq!(map.components[0].entries, ["src/main.rs#main"]);
+
+    store.git_commit("feat: app", "2026-10-01T09:00:00+00:00");
+    store.write("src/main.rs", "fn main() { }\n");
+    let map = store.repo().project_map().unwrap();
+    let git = map.git.expect("the store is a git repo");
+    assert_eq!(git.changed, 1, "{git:?}");
+}
+
+#[test]
 fn fill_closed_writes_the_day_once() {
     let store = Store::new();
     let done = "---\ntype: task\ntitle: Ship\nstatus: done\n---\n";

@@ -115,7 +115,7 @@ pub fn gaps(repo: &Repo) -> Result<Gaps, EngineError> {
                 GapKind::NoCode,
                 &node.id,
                 format!("{} {} lists no code", node.type_name, node.id),
-                "stone map --write".into(),
+                "stone arch map --write".into(),
             ));
         }
     }

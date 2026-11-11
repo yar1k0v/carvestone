@@ -1,4 +1,4 @@
-//! `stone map`: which folder holds each service's code. A container or component with no `code`
+//! `stone arch map`: which folder holds each service's code. A container or component with no `code`
 //! is matched by name to the project files in the index (`.csproj`, `package.json`,
 //! `pyproject.toml`, `Cargo.toml`); one match is proposed, several are listed for the owner to pick.
 //! The shared projects the services reference are proposed as components of their own.

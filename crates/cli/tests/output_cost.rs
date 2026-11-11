@@ -200,6 +200,37 @@ fn typical_calls_stay_under_their_bars() {
     assert!(over.is_empty(), "calls over their bar:\n{}", over.join("\n"));
 }
 
+/// One component with code of its own, so the map has a line to cut for each.
+fn many_components(repo: &Repo) {
+    for n in 0..80 {
+        repo.write(
+            &format!("stone/arch/part{n}.md"),
+            &format!("---\ntype: component\ntitle: Part {n}\nstatus: stable\ncode: ['src/part{n}/**']\n---\n"),
+        );
+        repo.write(
+            &format!("src/part{n}/Entry.cs"),
+            &format!(
+                "namespace Part{n} {{\n public static class Entry {{\n  public static void Main() {{ }}\n }}\n}}\n"
+            ),
+        );
+    }
+}
+
+#[test]
+fn the_map_stays_under_its_cap() {
+    let repo = Repo::new();
+    many_components(&repo);
+    let tokens = repo.cost("map", &["map"]);
+    assert!(tokens <= 600, "map printed {tokens} tokens");
+    let (code, out) = repo.run(&["map"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("more components left out"), "{out}");
+    assert!(
+        out.lines().any(|line| line.starts_with("Ready")),
+        "no ready line in:\n{out}"
+    );
+}
+
 #[test]
 fn budget_output_stays_within_the_budget() {
     let repo = Repo::new();

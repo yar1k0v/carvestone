@@ -95,4 +95,10 @@ impl Git {
             _ => Err(crate::command_error(&args, &out)),
         }
     }
+
+    /// The short name of the branch HEAD points at; `None` on a detached HEAD.
+    pub fn branch(&self) -> Result<Option<String>, GitError> {
+        let out = self.exec(&["symbolic-ref", "--short", "-q", "HEAD"], None)?;
+        Ok((out.code == 0).then(|| out.stdout.trim().to_string()))
+    }
 }

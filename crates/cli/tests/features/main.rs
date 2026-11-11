@@ -182,9 +182,20 @@ fn every_command_answers_on_a_small_store() {
             (&["arch", "lld", "arch/api", "--budget", "400"], 0, "LLD arch/api  Api"),
             (&["scan"], 0, "0 written, 0 unchanged"),
             (
-                &["map"],
+                &["arch", "map"],
                 0,
                 "arch/api  Api  no project is named like it; save its folder with --pick arch/api=<folder>",
+            ),
+            (&["map"], 0, "Components:"),
+            (
+                &["map", "--install-hook"],
+                0,
+                "added the session hook to .claude/settings.json",
+            ),
+            (
+                &["map", "--install-hook"],
+                0,
+                "no change: .claude/settings.json already runs the map",
             ),
             (&["instructions"], 0, "# What stone holds"),
             (&["instructions", "plan"], 0, "# Planning in stone"),

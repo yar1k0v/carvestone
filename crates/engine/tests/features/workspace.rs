@@ -7,6 +7,7 @@ use carvestone_engine::code_native::{NativeQuery, native};
 use carvestone_engine::create::init;
 use carvestone_engine::product::feature;
 use carvestone_engine::search::Hit;
+use carvestone_engine::session_hook;
 use carvestone_engine::why::why;
 
 use crate::support::Store;
@@ -250,6 +251,60 @@ fn a_feature_row_names_its_services_and_says_when_its_doc_is_stale() {
         seen,
         [("Login", &["Api".to_string()][..], true), ("Logout", &[][..], false)]
     );
+}
+
+/// The `hooks` object as `serde_json::to_string_pretty` prints it, without the leading `{`.
+const HOOK_TAIL: &str = r#"  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "stone map"
+          }
+        ]
+      }
+    ]
+  }
+}"#;
+
+#[test]
+fn the_session_hook_is_added_once_and_keeps_the_settings() {
+    let empty = format!("{{\n{HOOK_TAIL}\n");
+    assert_eq!(session_hook::apply("").unwrap(), empty);
+    assert_eq!(session_hook::apply(" \n\t").unwrap(), empty);
+
+    // User keys and their values stay, in their order, and `hooks` goes last.
+    let ordered = format!(
+        "{{\n  \"permissions\": {{\n    \"allow\": [\n      \"Bash(ls)\"\n    ]\n  }},\n  \"env\": {{\n    \"A\": \"1\"\n  }},\n{HOOK_TAIL}\n"
+    );
+    assert_eq!(
+        session_hook::apply(r#"{"permissions":{"allow":["Bash(ls)"]},"env":{"A":"1"}}"#).unwrap(),
+        ordered
+    );
+
+    // Another entry stays first; the stone one is added after it.
+    let other = r#"{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo hi"}]}]}}"#;
+    let merged = session_hook::apply(other).unwrap();
+    let value: serde_json::Value = serde_json::from_str(&merged).unwrap();
+    let entries = value["hooks"]["SessionStart"].as_array().unwrap();
+    assert_eq!(
+        entries.as_slice(),
+        [
+            serde_json::json!({"hooks": [{"type": "command", "command": "echo hi"}]}),
+            serde_json::json!({"hooks": [{"type": "command", "command": "stone map"}]}),
+        ],
+        "{merged}"
+    );
+
+    assert_eq!(session_hook::apply(&empty).unwrap(), empty);
+
+    // A repository that runs its own build keeps its command.
+    let own = r#"{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"target/debug/stone.exe map"}]}]}}"#;
+    assert_eq!(session_hook::apply(own).unwrap(), own);
+
+    assert!(session_hook::apply("[1]").is_err());
+    assert!(session_hook::apply(r#"{"hooks": 3}"#).is_err());
 }
 
 #[test]

@@ -34,7 +34,7 @@ Status: live
 | `stone arch c4` | Print a diagram as Mermaid text |
 | `stone arch connect` | Write one connection |
 | `stone arch gaps` | List what the design lacks, each with the command that fixes it |
-| `stone map [--write]` | Propose the code folder of each element without `code` |
+| `stone arch map [--write]` | Propose the code folder of each element without `code` |
 | `stone scan` | Write draft components for code no element owns |
 | `stone code explain <component>` | Show entry points, files, key symbols and dependencies |
 | `stone code entries [<component>]` | Show where execution starts |
@@ -43,7 +43,7 @@ Status: live
 
 ## Limits
 
-- ⚠ A new project starts with an empty map. Run `stone map` and `stone scan`, then write the connections.
+- ⚠ A new project starts with an empty map. Run `stone arch map` and `stone scan`, then write the connections.
 - Level 4 of C4 is not drawn. A component links to the code graph.
 - C4 Dynamic flows stay as Mermaid in docs.
 

@@ -242,6 +242,7 @@ pub const CLI_NESTED: &[(&str, &str)] = &[
     ("arch", "hld"),
     ("arch", "lld"),
     ("arch", "gaps"),
+    ("arch", "map"),
     ("arch", "c4"),
     ("arch", "connect"),
     ("task", "move"),

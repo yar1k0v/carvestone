@@ -83,6 +83,8 @@ stone serve
 
 `stone instructions` prints the workflow guide. `stone instructions --write` adds it to `CLAUDE.md` or `AGENTS.md`.
 
+`stone init` offers a Claude Code SessionStart hook that prints `stone map` at the start of each session; `stone map --install-hook` adds it later.
+
 | Topic | Use |
 | --- | --- |
 | `overview` | Default. What stone is and how to ask it |
@@ -120,7 +122,7 @@ Stone draws C4 levels 1 to 3 from the architecture items in `stone/arch/`. Agent
 - `stone arch gaps` lists what the design lacks, each with the command that fixes it.
 - `stone arch c4` prints a diagram as Mermaid text.
 - `stone arch hld` and `stone arch lld <container>` print the design.
-- `stone map` and `stone scan` propose code folders and draft components for an empty map.
+- `stone arch map` and `stone scan` propose code folders and draft components for an empty map.
 
 ⚠ A new project starts with an empty map. Stone checks only the links the build proves: imports, shared libraries and project references. It never calls a written run-time connection wrong.
 

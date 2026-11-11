@@ -27,6 +27,7 @@ use carvestone_engine::fields::SetValue;
 use carvestone_engine::guide::{Topic, guide_text, unknown_topic};
 use carvestone_engine::history::{self, HistoryOpts};
 use carvestone_engine::precedents::{self, Lookup, Precedents};
+use carvestone_engine::project_map::ProjectMap;
 use carvestone_engine::query::{Backlink, GetResult, ListFilter, ListRow, libraries_note};
 use carvestone_engine::remove::Removed;
 use carvestone_engine::rename::Renamed;
@@ -34,6 +35,7 @@ use carvestone_engine::renumber::Renumbered;
 use carvestone_engine::scan::{ScanOpts, ScanReport, ScanState, scan};
 use carvestone_engine::search::{SearchQuery, SearchResult, search};
 use carvestone_engine::service_map::{LibraryCode, ServiceCode};
+use carvestone_engine::session_hook;
 use carvestone_engine::timeline::{self, Date, Event, EventKind, TimelineOpts, parse_date};
 use carvestone_engine::why::{self, Why};
 use carvestone_engine::{EngineError, Problem, Repo, Severity};
@@ -58,6 +60,12 @@ struct Cli {
     #[command(subcommand)]
     command: Command,
 }
+
+/// Tokens the map may print: about 1% of the context a session starts with.
+const MAP_CAP: usize = 600;
+
+/// Review tasks the map names; a session reads the review queue at its head.
+const REVIEW_SHOWN: usize = 10;
 
 #[derive(Subcommand)]
 enum Command {
@@ -86,6 +94,15 @@ enum Command {
         #[command(subcommand)]
         command: CodeCommand,
     },
+    /// The project at the start of a session: components with code and entry points, tasks in review, the next ready tasks, milestone progress and git state.
+    Map {
+        /// Cut the map to about this many tokens; only the component lines shrink.
+        #[arg(long)]
+        budget: Option<usize>,
+        /// Add the Claude Code SessionStart hook that prints this map to .claude/settings.json.
+        #[arg(long)]
+        install_hook: bool,
+    },
     /// The design of the product: `hld` for the whole, `lld <container>` for one container.
     Arch {
         #[command(subcommand)]
@@ -99,16 +116,6 @@ enum Command {
         /// Delete drafts whose files are now owned by another component.
         #[arg(long)]
         prune: bool,
-    },
-    /// Propose the folder of each container and component without code, from the project files named like it,
-    /// and a component for each shared project the services reference.
-    Map {
-        /// Save every single proposal as the service's `code` and add the shared-library components.
-        #[arg(long)]
-        write: bool,
-        /// Save a folder for one service, as <ID>=<FOLDER>; repeat for more.
-        #[arg(long, value_name = "ID=FOLDER")]
-        pick: Vec<String>,
     },
     /// Print the trailers for the task in progress, or manage the commit-msg hook.
     CommitMsg {
@@ -196,6 +203,9 @@ enum Command {
         /// Add the stone block to CLAUDE.md or AGENTS.md without asking (otherwise init asks on a terminal).
         #[arg(long)]
         agent_block: bool,
+        /// Add the Claude Code SessionStart hook that prints `stone map`, without asking (otherwise init asks on a terminal).
+        #[arg(long)]
+        session_hook: bool,
     },
     /// Create an item.
     New(NewArgs),
@@ -497,6 +507,16 @@ enum ArchCommand {
         /// Cut the answer to about this many tokens (chars / 4); whole lines, first lines kept.
         #[arg(long)]
         budget: Option<usize>,
+    },
+    /// Propose the folder of each container and component without code, from the project files named like it,
+    /// and a component for each shared project the services reference.
+    Map {
+        /// Save every single proposal as the service's `code` and add the shared-library components.
+        #[arg(long)]
+        write: bool,
+        /// Save a folder for one service, as <ID>=<FOLDER>; repeat for more.
+        #[arg(long, value_name = "ID=FOLDER")]
+        pick: Vec<String>,
     },
     /// A C4 diagram as Mermaid text, drawn from the arch items and their connections.
     C4 {
@@ -850,12 +870,14 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         prefix,
         require_plan,
         agent_block,
+        session_hook,
     } = &cli.command
     {
         // No store exists yet, so this is the one command that must not open one.
         let done = init_with(&start, prefix.as_deref(), *require_plan)?;
         let block = offer_agent_block(&start, *agent_block, cli.json)?;
-        print!("{}", render_init(&done, &block, cli.json)?);
+        let hook = offer_session_hook(&start, *session_hook, cli.json)?;
+        print!("{}", render_init(&done, &block, &hook, cli.json)?);
         return Ok(ExitCode::SUCCESS);
     }
     let repo = open_repo(cli.root.as_deref(), &start)?;
@@ -941,6 +963,21 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             }
         }
         Command::Code { command } => print!("{}", run_code(&repo, &command, cli.json)?),
+        Command::Map { budget, install_hook } => {
+            if install_hook {
+                let done = repo.write_session_hook()?;
+                if cli.json {
+                    let value = serde_json::json!({ "file": done.file, "changed": done.changed });
+                    println!("{}", serde_json::to_string_pretty(&value)?);
+                } else if done.changed {
+                    println!("added the session hook to {}", session_hook::SETTINGS);
+                } else {
+                    println!("no change: {} already runs the map", session_hook::SETTINGS);
+                }
+            } else {
+                print!("{}", render_project_map(&repo.project_map()?, cli.json, budget)?);
+            }
+        }
         Command::Arch {
             command:
                 ArchCommand::Connect {
@@ -1084,43 +1121,6 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::Scan { dry_run, prune } => {
             let report = scan(&repo, &ScanOpts { dry_run, prune })?;
             print!("{}", render_scan(&report, dry_run, cli.json)?);
-        }
-        Command::Map { write, pick } => {
-            let proposals = repo.service_code()?;
-            let mut picks = Vec::new();
-            for raw in &pick {
-                let Some((id, folder)) = raw.split_once('=') else {
-                    anyhow::bail!("--pick takes <ID>=<FOLDER>, like arch/api=services/api; got `{raw}`");
-                };
-                picks.push((id.trim().to_string(), folder.trim().to_string()));
-            }
-            if write {
-                for p in &proposals {
-                    if let Some(folder) = &p.folder
-                        && !picks.iter().any(|(id, _)| *id == p.id)
-                    {
-                        picks.push((p.id.clone(), folder.clone()));
-                    }
-                }
-            }
-            let wrote = write || !pick.is_empty();
-            let pending: Vec<(String, String)> = proposals
-                .iter()
-                .filter_map(|p| Some((p.id.clone(), p.folder.clone()?)))
-                .collect();
-            let mut written = repo.set_service_code(&picks)?;
-            // Once the folders are saved, the services read them from their items.
-            let libraries = repo.library_code(if wrote { &[] } else { &pending })?;
-            let added = if write {
-                repo.add_libraries(&libraries)?
-            } else {
-                Vec::new()
-            };
-            written.extend(added.iter().cloned());
-            print!(
-                "{}",
-                render_map(&proposals, &libraries, &written, &added, wrote, cli.json)?
-            );
         }
         Command::CommitMsg {
             task,
@@ -1458,11 +1458,11 @@ fn render_map(
         let saved = written.iter().filter(|w| w.changed).count() - added.len();
         let left = proposals.len().saturating_sub(saved);
         if left > 0 {
-            out.push_str(&format!("{left} without code; run `stone map` to see them\n"));
+            out.push_str(&format!("{left} without code; run `stone arch map` to see them\n"));
         }
         if added.is_empty() && !libraries.is_empty() {
             out.push_str(&format!(
-                "{} shared libraries have no component; run `stone map` to see them\n",
+                "{} shared libraries have no component; run `stone arch map` to see them\n",
                 libraries.len()
             ));
         }
@@ -1504,9 +1504,86 @@ fn render_map(
     }
     let ready = proposals.iter().filter(|p| p.folder.is_some()).count() + libraries.len();
     if ready > 0 {
-        out.push_str(&format!("run `stone map --write` to save the {ready} proposed\n"));
+        out.push_str(&format!("run `stone arch map --write` to save the {ready} proposed\n"));
     }
     Ok(out)
+}
+
+/// The project at the start of a session, in the order a session reads it; only the component
+/// lines shrink to fit `budget`.
+fn render_project_map(map: &ProjectMap, json: bool, budget: Option<usize>) -> anyhow::Result<String> {
+    if json {
+        return pretty(map);
+    }
+    let lines = map.components.len();
+    Ok(lean::fit(Some(budget.unwrap_or(MAP_CAP)), lines, |kept| {
+        let mut out = map.project.clone();
+        if let Some(git) = &map.git {
+            match git.branch.as_deref() {
+                Some(branch) => out.push_str(&format!("  branch {branch}, {} changed files", git.changed)),
+                None => out.push_str(&format!("  detached HEAD, {} changed files", git.changed)),
+            }
+        }
+        out.push('\n');
+        if map.components.is_empty() {
+            out.push_str("Components: none; `stone instructions design` shows how to describe them\n");
+        } else {
+            out.push_str("Components:\n");
+            for component in map.components.iter().take(kept) {
+                let mut parts = vec![component.id.clone(), component.title.clone(), component.code.join(", ")];
+                if !component.entries.is_empty() {
+                    parts.push(format!(
+                        "entry {}",
+                        component.entries.iter().take(2).cloned().collect::<Vec<_>>().join(", ")
+                    ));
+                }
+                parts.retain(|part| !part.is_empty());
+                out.push_str(&format!("  {}\n", parts.join("  ")));
+            }
+            let left = lines.saturating_sub(kept);
+            if left > 0 {
+                out.push_str(&format!(
+                    "  {left} more components left out; `stone arch hld` lists them\n"
+                ));
+            }
+        }
+        if map.review.is_empty() {
+            out.push_str("In review: none\n");
+        } else {
+            out.push_str("In review:\n");
+            for task in map.review.iter().take(REVIEW_SHOWN) {
+                out.push_str(&format!("  {}  {}\n", task.id, task.title));
+            }
+            let more = map.review.len().saturating_sub(REVIEW_SHOWN);
+            if more > 0 {
+                out.push_str(&format!(
+                    "  {more} more; `stone list --type task --status review` lists them\n"
+                ));
+            }
+        }
+        if map.ready_total == 0 {
+            out.push_str("Ready: none\n");
+        } else {
+            out.push_str(&format!(
+                "Ready, {} of {} (`stone task next` lists more):\n",
+                map.ready.len(),
+                map.ready_total
+            ));
+            for task in &map.ready {
+                out.push_str(&format!("  {}  {}\n", task.id, task.title));
+            }
+        }
+        if !map.milestones.is_empty() {
+            out.push_str("Milestones:\n");
+            for milestone in &map.milestones {
+                out.push_str(&format!(
+                    "  {}  {}  {} of {} done\n",
+                    milestone.id, milestone.title, milestone.done, milestone.total
+                ));
+            }
+        }
+        out
+    }))
 }
 
 /// Titles of the items whose front matter a hit points at, so a hit that only repeats the title can be left out.
@@ -1545,6 +1622,41 @@ fn render_search(
     }))
 }
 
+fn run_arch_map(repo: &Repo, write: bool, pick: &[String], json: bool) -> anyhow::Result<String> {
+    let proposals = repo.service_code()?;
+    let mut picks = Vec::new();
+    for raw in pick {
+        let Some((id, folder)) = raw.split_once('=') else {
+            anyhow::bail!("--pick takes <ID>=<FOLDER>, like arch/api=services/api; got `{raw}`");
+        };
+        picks.push((id.trim().to_string(), folder.trim().to_string()));
+    }
+    if write {
+        for p in &proposals {
+            if let Some(folder) = &p.folder
+                && !picks.iter().any(|(id, _)| *id == p.id)
+            {
+                picks.push((p.id.clone(), folder.clone()));
+            }
+        }
+    }
+    let wrote = write || !pick.is_empty();
+    let pending: Vec<(String, String)> = proposals
+        .iter()
+        .filter_map(|p| Some((p.id.clone(), p.folder.clone()?)))
+        .collect();
+    let mut written = repo.set_service_code(&picks)?;
+    // Once the folders are saved, the services read them from their items.
+    let libraries = repo.library_code(if wrote { &[] } else { &pending })?;
+    let added = if write {
+        repo.add_libraries(&libraries)?
+    } else {
+        Vec::new()
+    };
+    written.extend(added.iter().cloned());
+    render_map(&proposals, &libraries, &written, &added, wrote, json)
+}
+
 fn run_arch(repo: &Repo, command: &ArchCommand, json: bool) -> anyhow::Result<String> {
     Ok(match command {
         ArchCommand::Hld { budget } => {
@@ -1571,6 +1683,7 @@ fn run_arch(repo: &Repo, command: &ArchCommand, json: bool) -> anyhow::Result<St
                 lean::fit_lines(*budget, &render_gaps(&found))
             }
         }
+        ArchCommand::Map { write, pick } => run_arch_map(repo, *write, pick, json)?,
         ArchCommand::C4 { level, id, budget } => {
             let source = match (level, id.as_deref()) {
                 (C4Level::Context, None) => c4::c4_context(repo)?,
@@ -1686,7 +1799,7 @@ fn render_lld(lld: &design::Lld) -> anyhow::Result<String> {
     match &lld.service {
         Some(service) => out.push_str(&render_explain(service, false, None)?),
         None => out.push_str(&format!(
-            "Service view: none; {} has no `code` list, so give it one or run `stone map`\n",
+            "Service view: none; {} has no `code` list, so give it one or run `stone arch map`\n",
             lld.container.id
         )),
     }
@@ -2102,7 +2215,10 @@ fn offer_agent_block(root: &std::path::Path, yes: bool, json: bool) -> anyhow::R
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let agreed = yes || (!json && std::io::stdin().is_terminal() && ask_yes(&file)?);
+    let prompt = format!(
+        "Add a short stone block to {file} so agents find the stone CLI? Text outside it is never touched. [y/N] "
+    );
+    let agreed = yes || (!json && std::io::stdin().is_terminal() && ask_yes(&prompt)?);
     if !agreed {
         return Ok(BlockOffer::Declined(file));
     }
@@ -2110,8 +2226,32 @@ fn offer_agent_block(root: &std::path::Path, yes: bool, json: bool) -> anyhow::R
     Ok(BlockOffer::Added(done.file))
 }
 
-fn ask_yes(file: &str) -> anyhow::Result<bool> {
-    eprint!("Add a short stone block to {file} so agents find the stone CLI? Text outside it is never touched. [y/N] ");
+/// What `init` did about the Claude Code SessionStart hook.
+enum HookOffer {
+    /// Written, or already there.
+    Added,
+    /// Not written.
+    Declined,
+}
+
+/// Asks before the hook goes into the user's settings: `--session-hook` is the yes, a terminal is
+/// asked, and anything else (a pipe, CI, `--json`) is a no, so nothing is written unasked.
+fn offer_session_hook(root: &std::path::Path, yes: bool, json: bool) -> anyhow::Result<HookOffer> {
+    let root = std::path::absolute(root)?;
+    let prompt = format!(
+        "Add a Claude Code SessionStart hook to {} so each session starts with `stone map`? [y/N] ",
+        session_hook::SETTINGS
+    );
+    let agreed = yes || (!json && std::io::stdin().is_terminal() && ask_yes(&prompt)?);
+    if !agreed {
+        return Ok(HookOffer::Declined);
+    }
+    Repo::open(&root)?.write_session_hook()?;
+    Ok(HookOffer::Added)
+}
+
+fn ask_yes(prompt: &str) -> anyhow::Result<bool> {
+    eprint!("{prompt}");
     std::io::stderr().flush()?;
     let mut answer = String::new();
     std::io::stdin().read_line(&mut answer)?;
@@ -2130,7 +2270,7 @@ fn render_agent_block(done: &AgentBlock, json: bool) -> anyhow::Result<String> {
     })
 }
 
-fn render_init(done: &Initialised, block: &BlockOffer, json: bool) -> anyhow::Result<String> {
+fn render_init(done: &Initialised, block: &BlockOffer, hook: &HookOffer, json: bool) -> anyhow::Result<String> {
     if json {
         let (stone_repo, skipped) = match &done.stone_repo {
             StoneRepo::NotNeeded => ("not-needed", None),
@@ -2147,6 +2287,10 @@ fn render_init(done: &Initialised, block: &BlockOffer, json: bool) -> anyhow::Re
             "agent_block": match block {
                 BlockOffer::Added(file) => serde_json::json!({ "state": "added", "file": file }),
                 BlockOffer::Declined(file) => serde_json::json!({ "state": "not-added", "file": file }),
+            },
+            "session_hook": match hook {
+                HookOffer::Added => "added",
+                HookOffer::Declined => "not-added",
             },
         });
         return Ok(format!("{}\n", serde_json::to_string_pretty(&value)?));
@@ -2177,6 +2321,12 @@ fn render_init(done: &Initialised, block: &BlockOffer, json: bool) -> anyhow::Re
         BlockOffer::Declined(file) => out.push_str(&format!(
             "stone block not added; `stone instructions --write` adds it to {file} so agents find the CLI\n"
         )),
+    }
+    match hook {
+        HookOffer::Added => out.push_str(&format!("session hook added to {}\n", session_hook::SETTINGS)),
+        HookOffer::Declined => out.push_str(
+            "session hook not added; `stone map --install-hook` adds it so each Claude Code session starts with the map\n",
+        ),
     }
     Ok(out)
 }
