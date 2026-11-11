@@ -3,7 +3,7 @@
 use carvestone_core::{IdScheme, ItemId, ItemType, NumberedKind, sections, set_section};
 use carvestone_store::{Config, Document, FrontmatterError, StoreError};
 
-use crate::create::{NewItem, Written, stamp_by, stamp_value, today};
+use crate::create::{NewItem, Written, now, stamp_by, stamp_value};
 use crate::fields::{SetCtx, SetValue, add_links, apply_set, apply_value};
 use crate::repo::{EngineError, Repo};
 use crate::resolve::Snapshot;
@@ -111,7 +111,7 @@ fn build_text(
             .ok_or_else(|| EngineError::Invalid(format!("no statuses are configured for a {}", ty.as_str())))?
     };
     apply_set(&ctx, &mut doc, "status", &status)?;
-    let created = today();
+    let created = now();
     apply_set(&ctx, &mut doc, "created", &created)?;
     doc.set("generated", stamp_value(by, &created))?;
     for (key, value) in &req.set {

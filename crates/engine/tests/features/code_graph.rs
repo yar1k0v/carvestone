@@ -347,6 +347,57 @@ fn a_scip_listed_file_has_one_file_symbol_and_a_missing_index_is_reported() {
     assert_eq!(row.detail, ".scip/java.scip not found; run your indexer first");
 }
 
+/// A tool that stops with an object dump (its last line is `}`) is reported by its error line, the
+/// full output is kept in a file the report names, and scip-python is never left to ask git for
+/// a version.
+#[test]
+fn a_failed_indexer_reports_its_error_line_and_where_its_output_is() {
+    let store = project(&[("src/a.py", "def a():\n    return 1\n")]);
+    let (name, text) = if cfg!(windows) {
+        (
+            "scip-python.cmd",
+            "@echo off\r\necho %* 1>&2\r\necho Experienced Fatal Error While Indexing: 1>&2\r\necho   currentFilepath: 'src/a.py', 1>&2\r\necho   error: RangeError: Maximum call stack size exceeded 1>&2\r\necho } 1>&2\r\nexit /b 1\r\n",
+        )
+    } else {
+        (
+            "scip-python",
+            "#!/bin/sh\necho \"$@\" >&2\necho 'Experienced Fatal Error While Indexing:' >&2\necho \"  currentFilepath: 'src/a.py',\" >&2\necho '  error: RangeError: Maximum call stack size exceeded' >&2\necho '}' >&2\nexit 1\n",
+        )
+    };
+    store.write(&format!("bin/{name}"), text);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(
+            store.path(&format!("bin/{name}")),
+            std::fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+    }
+
+    let report = native(
+        &store.repo(),
+        &NativeQuery {
+            search_path: Some(store.path("bin").into_os_string()),
+            ..NativeQuery::default()
+        },
+    )
+    .unwrap();
+    let run = report
+        .indexers
+        .iter()
+        .find(|run| run.indexer == "scip-python")
+        .expect("the failed indexer is in the report");
+    assert_eq!(run.status, "failed");
+    assert_eq!(
+        run.detail,
+        "scip-python in .: error: RangeError: Maximum call stack size exceeded; full output: .stone/native/scip-python-0.log"
+    );
+    let log = store.read(".stone/native/scip-python-0.log");
+    assert!(log.contains("--project-version 0"), "{log}");
+    assert!(log.contains("currentFilepath: 'src/a.py'"), "{log}");
+}
+
 /// One occurrence: `range` and `enclosing` are SCIP's 0-based forms.
 fn occurrence(symbol: &str, range: [i32; 3], enclosing: Option<[i32; 4]>) -> scip::types::Occurrence {
     scip::types::Occurrence {

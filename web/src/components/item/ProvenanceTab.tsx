@@ -1,5 +1,5 @@
 import type { ItemView } from "@/api/types/ItemView";
-import { asStamp, asStamps } from "./stamps";
+import { asStamp, asStamps, dayOf } from "./stamps";
 import { TrustBadge } from "./TrustBadge";
 
 /** Who generated the item and every review that confirmed it. */
@@ -15,7 +15,7 @@ export function ProvenanceTab({ item }: { item: ItemView }) {
         <h2 className="mb-2 font-medium">Generated</h2>
         {generated ? (
           <p>
-            <span className="font-mono">{generated.by}</span> on {generated.at}
+            <span className="font-mono">{generated.by}</span> on {dayOf(generated.at)}
           </p>
         ) : (
           <p className="text-muted-foreground">Not recorded.</p>
@@ -30,7 +30,7 @@ export function ProvenanceTab({ item }: { item: ItemView }) {
             {verified.map((stamp, i) => (
               // The same reviewer can sign twice on one day, so the position is part of the key.
               <li key={`${stamp.by}@${stamp.at}#${i}`}>
-                <span className="font-mono">{stamp.by}</span> on {stamp.at}
+                <span className="font-mono">{stamp.by}</span> on {dayOf(stamp.at)}
               </li>
             ))}
           </ul>

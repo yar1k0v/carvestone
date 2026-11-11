@@ -2,12 +2,16 @@ import { Fragment } from "react";
 import type { JsonValue } from "@/api/types/serde_json/JsonValue";
 import { AppLink } from "@/components/markdown/AppLink";
 import type { Resolver } from "@/components/markdown/links";
+import { dayOf } from "./stamps";
 
 /** Fields whose values name other items. */
 const RELATIONS = new Set(["links", "depends_on", "components", "uses", "milestone", "plan", "supersedes", "parent"]);
 
 /** Shown in the header or on the Provenance tab instead. */
 const SKIPPED = new Set(["title", "generated", "verified"]);
+
+/** Dates that may hold a timestamp; the table shows the day only. */
+const DAYS = new Set(["created", "closed", "stale_after"]);
 
 function Scalar({ name, value, resolver }: { name: string; value: JsonValue; resolver: Resolver }) {
   if (typeof value === "string" && RELATIONS.has(name)) {
@@ -29,7 +33,7 @@ function Scalar({ name, value, resolver }: { name: string; value: JsonValue; res
   }
   if (value === null) return <span className="text-muted-foreground">none</span>;
   if (typeof value === "object") return <code className="font-mono text-xs">{JSON.stringify(value)}</code>;
-  return <>{String(value)}</>;
+  return <>{typeof value === "string" && DAYS.has(name) ? dayOf(value) : String(value)}</>;
 }
 
 function Value({ name, value, resolver }: { name: string; value: JsonValue; resolver: Resolver }) {

@@ -2,7 +2,7 @@
 
 use std::thread;
 
-use carvestone_engine::create::NewItem;
+use carvestone_engine::create::{NewItem, timestamp_of};
 use carvestone_engine::edit::Edit;
 use carvestone_engine::query::GetResult;
 use carvestone_engine::{EngineError, ErrorKind};
@@ -84,11 +84,28 @@ fn each_type_gets_its_id_and_folder() {
     for (type_name, title, slug, id, path) in cases {
         let made = repo.create(&new(type_name, title, slug), false).unwrap();
         assert_eq!((made.id.as_str(), made.path.as_str()), (id, path), "{type_name}");
-        assert!(
-            store
-                .read(path)
-                .starts_with(&format!("---\ntype: {type_name}\ntitle: {title}\n"))
-        );
+        let text = store.read(path);
+        assert!(text.starts_with(&format!("---\ntype: {type_name}\ntitle: {title}\n")));
+        let stamp = text
+            .lines()
+            .find_map(|line| line.strip_prefix("created: "))
+            .unwrap_or_else(|| panic!("{type_name} has no created line: {text}"));
+        assert_eq!(stamp.len(), 25, "{type_name}: {stamp}");
+        assert_eq!(stamp.as_bytes()[10], b'T', "{type_name}: {stamp}");
+        assert!(stamp.ends_with("+00:00"), "{type_name}: {stamp}");
+        assert!(text.contains(&format!("at: '{stamp}' }}")), "{type_name}: {text}");
+    }
+}
+
+#[test]
+fn a_timestamp_is_utc_with_an_offset() {
+    let cases = [
+        (0, "1970-01-01T00:00:00+00:00"),
+        (951_868_799, "2000-02-29T23:59:59+00:00"),
+        (1_794_391_402, "2026-11-11T10:03:22+00:00"),
+    ];
+    for (secs, want) in cases {
+        assert_eq!(timestamp_of(secs), want, "{secs}");
     }
 }
 
@@ -106,7 +123,18 @@ fn an_edit_changes_only_its_lines_and_keeps_crlf() {
 
     repo.edit("CS-1", &section("Notes", "new"), false).unwrap();
     let want = TASK.replace("priority: high", "priority: low").replace("last", "new");
-    assert_eq!(unstamped(&store.read("stone/tasks/CS-1.md")), want);
+    let edited = store.read("stone/tasks/CS-1.md");
+    assert_eq!(unstamped(&edited), want);
+    assert!(
+        edited
+            .lines()
+            .any(|line| line.starts_with("generated: ") && line.contains("+00:00' }")),
+        "{edited}"
+    );
+
+    // A repeat changes nothing, so it does not stamp a new second.
+    repo.edit("CS-1", &section("Notes", "new"), false).unwrap();
+    assert_eq!(store.read("stone/tasks/CS-1.md"), edited);
 }
 
 #[test]
@@ -398,7 +426,7 @@ fn errors() {
     let store = Store::new();
     store.write("stone/tasks/CS-1.md", BARE);
     let repo = store.repo();
-    let cases: [(&str, EngineError, &str); 15] = [
+    let cases: [(&str, EngineError, &str); 24] = [
         (
             "bad type",
             repo.create(&new("bogus", "x", None), false).unwrap_err(),
@@ -451,6 +479,54 @@ fn errors() {
             "stale_after `` is not a date",
         ),
         (
+            "stale_after with a word for a time",
+            repo.edit("CS-1", &set("stale_after", "2026-12-01Tsoon"), false)
+                .unwrap_err(),
+            "stale_after `2026-12-01Tsoon` is not a date",
+        ),
+        (
+            "stale_after time without an offset",
+            repo.edit("CS-1", &set("stale_after", "2026-12-01T09:30:00"), false)
+                .unwrap_err(),
+            "stale_after `2026-12-01T09:30:00` is not a date",
+        ),
+        (
+            "stale_after time without seconds",
+            repo.edit("CS-1", &set("stale_after", "2026-12-01T09:30+00:00"), false)
+                .unwrap_err(),
+            "stale_after `2026-12-01T09:30+00:00` is not a date",
+        ),
+        (
+            "stale_after hour 24",
+            repo.edit("CS-1", &set("stale_after", "2026-12-01T24:00:00+00:00"), false)
+                .unwrap_err(),
+            "stale_after `2026-12-01T24:00:00+00:00` is not a date",
+        ),
+        (
+            "stale_after second 60",
+            repo.edit("CS-1", &set("stale_after", "2026-12-01T09:30:60+00:00"), false)
+                .unwrap_err(),
+            "stale_after `2026-12-01T09:30:60+00:00` is not a date",
+        ),
+        (
+            "stale_after offset without a colon",
+            repo.edit("CS-1", &set("stale_after", "2026-12-01T09:30:00+0000"), false)
+                .unwrap_err(),
+            "stale_after `2026-12-01T09:30:00+0000` is not a date",
+        ),
+        (
+            "stale_after fraction without digits",
+            repo.edit("CS-1", &set("stale_after", "2026-12-01T09:30:00.+00:00"), false)
+                .unwrap_err(),
+            "stale_after `2026-12-01T09:30:00.+00:00` is not a date",
+        ),
+        (
+            "stale_after text after the offset",
+            repo.edit("CS-1", &set("stale_after", "2026-12-01T09:30:00+00:00x"), false)
+                .unwrap_err(),
+            "stale_after `2026-12-01T09:30:00+00:00x` is not a date",
+        ),
+        (
             "bad created",
             repo.edit("CS-1", &set("created", "soon"), false).unwrap_err(),
             "created `soon` is not a date",
@@ -459,6 +535,12 @@ fn errors() {
             "empty created",
             repo.edit("CS-1", &set("created", ""), false).unwrap_err(),
             "created `` is not a date",
+        ),
+        (
+            "created time without an offset",
+            repo.edit("CS-1", &set("created", "2026-12-01T09:30:00"), false)
+                .unwrap_err(),
+            "created `2026-12-01T09:30:00` is not a date",
         ),
         (
             "new item with bad stale_after",
@@ -523,6 +605,18 @@ fn from_markdown_keeps_stale_after_and_names_what_it_left_out() {
             "timestamp",
             "---\ntitle: Stamped\nstale_after: 2026-01-01T09:30:00+00:00\n---\n\nText.\n",
             Some("stale_after: 2026-01-01T09:30:00+00:00"),
+            vec![],
+        ),
+        (
+            "zulu timestamp",
+            "---\ntitle: Zulu\nstale_after: 2026-01-01T09:30:00Z\n---\n\nText.\n",
+            Some("stale_after: 2026-01-01T09:30:00Z"),
+            vec![],
+        ),
+        (
+            "fraction and negative offset",
+            "---\ntitle: Fraction\nstale_after: 2026-01-01T09:30:00.250-08:00\n---\n\nText.\n",
+            Some("stale_after: 2026-01-01T09:30:00.250-08:00"),
             vec![],
         ),
         (

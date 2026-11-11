@@ -6,6 +6,11 @@ export interface Stamp {
   at: string;
 }
 
+/** The day of a date or a timestamp; any other text is returned as it is. */
+export function dayOf(at: string): string {
+  return /^\d{4}-\d{2}-\d{2}T/.test(at) ? at.slice(0, 10) : at;
+}
+
 export function asStamp(value: JsonValue | undefined): Stamp | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const { by, at } = value;

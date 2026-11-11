@@ -210,6 +210,17 @@ fn scan_writes_a_draft_for_code_no_component_owns() {
     let text = store.read(&format!("stone/{key}"));
     let want = "---\ntype: component\ntitle: 'demo: src'\nstatus: draft\ntechnology: Rust\ncode: ['src/jobs.rs']\nuses: ['arch/shop/store']\n---\n\n## Responsibilities\n\nDraft from `stone scan`: 1 files under `src` in project demo. Say what they are for, curate `code`, `entry` and `uses`, then change the status.\n";
     assert_eq!(without(&without(&text, "created:"), "generated:"), want);
+    let stamp = text
+        .lines()
+        .find_map(|line| line.strip_prefix("created: "))
+        .unwrap_or_else(|| panic!("no created line: {text}"));
+    assert_eq!(stamp.len(), 25, "{stamp}");
+    assert_eq!(stamp.as_bytes()[10], b'T', "{stamp}");
+    assert!(stamp.ends_with("+00:00"), "{stamp}");
+    assert!(
+        text.contains(&format!("generated: {{ by: 'process:stone-scan', at: '{stamp}' }}")),
+        "{text}"
+    );
     assert!(store.exists(".stone/scan-state.json"));
 
     // A second scan over the same code writes nothing.
@@ -454,6 +465,7 @@ fn connect_writes_the_uses_entry_and_the_bullet_and_a_repeat_changes_nothing() {
     let text = raw.replace("\r\n", "\n");
     assert!(text.contains("\nuses: [arch/shop/store/files]\n"), "{text}");
     assert!(text.contains("\ngenerated:"), "{text}");
+    assert!(text.contains("+00:00' }"), "{text}");
     assert!(
         text.contains("\n## Uses\n\n- [[arch/shop/store/files]]: Writes blobs (over NATS)\n"),
         "{text}"

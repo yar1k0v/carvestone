@@ -246,10 +246,10 @@ pub(crate) fn uses_problems(snapshot: &Snapshot, out: &mut Vec<Problem>) {
     }
 }
 
-/// `YYYY-MM-DD`, optionally followed by `T` and anything (a timestamp).
+/// `YYYY-MM-DD`, alone or followed by `T`, a time and a UTC offset.
 pub(crate) fn is_date(text: &str) -> bool {
     let b = text.as_bytes();
-    if b.len() < 10 || (b.len() > 10 && b[10] != b'T') {
+    if b.len() < 10 || (b.len() > 10 && !(b[10] == b'T' && is_time(&b[11..]))) {
         return false;
     }
     let digits = |r: std::ops::Range<usize>| -> Option<u32> {
@@ -275,4 +275,28 @@ pub(crate) fn is_date(text: &str) -> bool {
         _ => return false,
     };
     (1..=days).contains(&day)
+}
+
+/// `hh:mm:ss`, an optional `.` and digits, then `Z` or `+hh:mm` or `-hh:mm`, and nothing more.
+fn is_time(rest: &[u8]) -> bool {
+    // Every number is two digits; `max` is the highest value it may have.
+    let two = |at: usize, max: u8| -> bool {
+        matches!(rest.get(at..at + 2), Some([t, u]) if t.is_ascii_digit() && u.is_ascii_digit() && (t - b'0') * 10 + (u - b'0') <= max)
+    };
+    if !(two(0, 23) && rest.get(2) == Some(&b':') && two(3, 59) && rest.get(5) == Some(&b':') && two(6, 59)) {
+        return false;
+    }
+    let mut at = 8;
+    if rest.get(at) == Some(&b'.') {
+        let digits = rest[at + 1..].iter().take_while(|d| d.is_ascii_digit()).count();
+        if digits == 0 {
+            return false;
+        }
+        at += 1 + digits;
+    }
+    match rest.get(at..) {
+        Some(b"Z") => true,
+        Some([b'+' | b'-', ..]) => rest.len() == at + 6 && two(at + 1, 23) && rest[at + 3] == b':' && two(at + 4, 59),
+        _ => false,
+    }
 }

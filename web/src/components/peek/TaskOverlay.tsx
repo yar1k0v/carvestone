@@ -5,7 +5,7 @@ import { Answer, Empty } from "@/components/architecture/service/parts";
 import { columnLabel, ageOf } from "@/components/board/model";
 import { ErrorNotice } from "@/components/item/ErrorNotice";
 import { ChangedFiles } from "@/components/item/Extras";
-import { asStamp } from "@/components/item/stamps";
+import { asStamp, dayOf } from "@/components/item/stamps";
 import { isItemView, useItemQuery } from "@/components/item/useItem";
 import { AppLink } from "@/components/markdown/AppLink";
 import { Markdown } from "@/components/markdown/Markdown";
@@ -162,7 +162,7 @@ function Facts({ row, item, onDone }: { row: ListRow; item: ItemView | null; onD
             ))}
           </Fact>
         )}
-        {written === null ? null : <Fact label="Written by">{`${written.by}, ${written.at}`}</Fact>}
+        {written === null ? null : <Fact label="Written by">{`${written.by}, ${dayOf(written.at)}`}</Fact>}
       </dl>
     </aside>
   );

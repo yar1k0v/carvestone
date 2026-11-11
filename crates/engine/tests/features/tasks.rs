@@ -196,6 +196,9 @@ fn a_task_moves_from_todo_to_done_and_back() {
     repo.move_task("CS-1", "done", false).unwrap();
     let text = store.read("stone/tasks/CS-1.md");
     assert!(text.contains("\nclosed: 20"), "{text}");
+    // `closed` stays a plain day, never a timestamp.
+    let closed = text.lines().find(|line| line.starts_with("closed: ")).unwrap();
+    assert_eq!(closed.len(), 18, "{closed}");
     assert_eq!(without(&text, "closed:"), TASK.replace("status: todo", "status: done"));
 
     repo.move_task("CS-1", "in-progress", false).unwrap();

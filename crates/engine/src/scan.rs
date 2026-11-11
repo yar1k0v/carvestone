@@ -16,7 +16,7 @@ use rusqlite::Connection;
 use crate::code::open;
 use crate::code_entries::{detect, targets_in};
 use crate::code_index::{project_dir, root_prefixes, stored_project_dirs};
-use crate::create::today;
+use crate::create::now;
 use crate::modules::{Module, stored as stored_modules};
 use crate::owner::{Element, arch_elements, tracked};
 use crate::repo::{EngineError, Repo};
@@ -283,8 +283,14 @@ fn render(subject: &Subject, technology: &str, entries: &[String], uses: &BTreeS
         .parent
         .as_ref()
         .map_or_else(String::new, |p| format!("parent: {}\n", quote(p)));
+    // A colon inside `{ .. }` needs quotes; a plain day keeps its old text.
+    let at = if date.contains(':') {
+        format!("'{date}'")
+    } else {
+        date.to_string()
+    };
     format!(
-        "---\ntype: component\ntitle: {title}\nstatus: draft\n{parent}technology: {technology}\ncode: {code}\n{entry}uses: {uses}\ncreated: {date}\ngenerated: {{ by: 'process:stone-scan', at: {date} }}\n---\n\n## Responsibilities\n\n{summary}\n",
+        "---\ntype: component\ntitle: {title}\nstatus: draft\n{parent}technology: {technology}\ncode: {code}\n{entry}uses: {uses}\ncreated: {date}\ngenerated: {{ by: 'process:stone-scan', at: {at} }}\n---\n\n## Responsibilities\n\n{summary}\n",
         title = quote(&subject.title),
         code = list(subject.code.iter().cloned()),
         uses = list(uses.iter().cloned()),
@@ -498,7 +504,7 @@ pub fn scan(repo: &Repo, opts: &ScanOpts) -> Result<ScanReport, EngineError> {
     }
 
     let found = detect(conn, &layout.root, &|_| true)?;
-    let today = today();
+    let today = now();
     let mut claimed: BTreeSet<String> = BTreeSet::new();
     let mut taken: BTreeSet<String> = drafts.keys().cloned().collect();
     let mut entries: Vec<(String, ScanState)> = Vec::new();

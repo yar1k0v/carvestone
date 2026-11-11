@@ -142,7 +142,7 @@ describe("planning", () => {
         body: [
           plan("undated", "active"),
           plan("old", "active", { created: "2026-10-01" }),
-          plan("new", "active", { created: "2026-10-12" }),
+          plan("new", "active", { created: "2026-10-12T08:00:00+00:00" }),
           plan("finished", "done", { created: "2026-09-01" }),
         ],
       },
@@ -153,6 +153,7 @@ describe("planning", () => {
     expect(links.map((link) => link.getAttribute("href"))).toEqual(["/plans/new", "/plans/old", "/plans/undated"]);
     expect(links[0]).toHaveTextContent("new");
     expect(links[0]).toHaveTextContent("2026-10-12");
+    expect(links[0]).not.toHaveTextContent("08:00");
     expect(screen.queryByRole("link", { name: /finished/ })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: /^done/ }));
     expect(screen.getByRole("link", { name: /finished/ })).toBeInTheDocument();

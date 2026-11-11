@@ -6,7 +6,7 @@ use carvestone_core::{ItemType, USES_MAX_WORDS, sections, uses_bullets};
 use carvestone_store::Entry;
 
 use crate::arch_graph::target_id;
-use crate::create::{Written, stamp_by, stamp_value, today};
+use crate::create::{Written, now, stamp_by, stamp_value};
 use crate::edit::type_of;
 use crate::fields::{SetCtx, apply_set, check_done_sections, check_vocab, sync_closed};
 use crate::query::{ListFilter, ListRow};
@@ -126,7 +126,7 @@ impl Repo {
             };
             // Stamped like `stone edit` does, and only when something changed, so a repeat writes nothing.
             if listed || doc.body != before {
-                doc.set("generated", stamp_value(&stamp_by(self)?, &today()))?;
+                doc.set("generated", stamp_value(&stamp_by(self)?, &now()))?;
             }
             Ok(())
         });

@@ -131,10 +131,30 @@ fn date_of(secs: u64) -> String {
     format!("{year:04}-{month:02}-{day:02}")
 }
 
+/// A Unix time as `YYYY-MM-DDThh:mm:ss+00:00`, in UTC.
+pub fn timestamp_of(secs: u64) -> String {
+    let rest = secs % 86_400;
+    format!(
+        "{}T{:02}:{:02}:{:02}+00:00",
+        date_of(secs),
+        rest / 3_600,
+        rest % 3_600 / 60,
+        rest % 60
+    )
+}
+
+fn unix_now() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs())
+}
+
 /// Today's UTC date as `YYYY-MM-DD`.
 pub fn today() -> String {
-    let secs = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
-    date_of(secs)
+    date_of(unix_now())
+}
+
+/// The UTC time now, in the form new writes use.
+pub fn now() -> String {
+    timestamp_of(unix_now())
 }
 
 const FOLDERS: [&str; 7] = ["tasks", "milestones", "decisions", "docs", "plans", "refs", "arch"];

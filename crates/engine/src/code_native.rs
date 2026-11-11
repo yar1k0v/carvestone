@@ -46,7 +46,7 @@
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ffi::OsString;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex, mpsc};
@@ -386,13 +386,15 @@ fn windows_python(indexer: &Indexer, program: &Path, out: &Path) -> Result<Optio
 
 /// Runs `indexer` in `dir` and writes its index to `out`. The tool is killed
 /// when it has not finished by `timeout`; every [`TICK`] meanwhile, `tick` hears
-/// the seconds so far and the last line it printed. The error is that last
-/// line, or why it could not start or finish.
+/// the seconds so far and the last line it printed. The tool's stderr goes to
+/// `log`, which stays only when the tool fails. The error is the last
+/// telling line and where the full output is, or why it could not start or finish.
 fn run_indexer(
     indexer: &Indexer,
     program: &Path,
     dir: &Path,
     out: &Path,
+    log: &Path,
     timeout: Duration,
     tick: &mut dyn FnMut(u64, &str),
 ) -> Result<(), String> {
@@ -418,7 +420,8 @@ fn run_indexer(
             let name = dir
                 .file_name()
                 .map_or_else(|| "project".to_string(), |name| name.to_string_lossy().into_owned());
-            cmd.args(["index", "--project-name", &name]);
+            // The tool reads its version from `git rev-parse HEAD` and stops in a repo with no commit.
+            cmd.args(["index", "--project-name", &name, "--project-version", "0"]);
             if let Some(packages) = &packages {
                 cmd.arg("--environment").arg(packages);
             }
@@ -432,9 +435,12 @@ fn run_indexer(
     if indexer.name != "scip-dart" {
         cmd.arg(out);
     }
+    // Without a log the run goes on; the error line alone is then reported.
+    let mut log_file = std::fs::File::create(log).ok();
     let mut child = cmd.spawn().map_err(|err| format!("could not start: {err}"))?;
 
-    // Only the last telling line of stderr is kept, so a chatty tool cannot fill memory.
+    // Only the last telling line of stderr is kept in memory, so a chatty tool cannot fill it;
+    // every line goes to the log file.
     let last = Arc::new(Mutex::new(String::new()));
     let (done, finished) = mpsc::channel();
     if let Some(stderr) = child.stderr.take() {
@@ -443,6 +449,9 @@ fn run_indexer(
             let mut reader = BufReader::new(stderr);
             let mut line = Vec::new();
             while matches!(reader.read_until(b'\n', &mut line), Ok(n) if n > 0) {
+                if let Some(file) = log_file.as_mut() {
+                    let _ = file.write_all(&line);
+                }
                 let text = String::from_utf8_lossy(&line);
                 if telling(&text)
                     && let Ok(mut held) = last.lock()
@@ -485,25 +494,32 @@ fn run_indexer(
         std::fs::rename(dir.join("index.scip"), out).map_err(|err| format!("could not keep its index: {err}"))?;
     }
     if status.success() && out.is_file() {
+        let _ = std::fs::remove_file(log);
         return Ok(());
     }
     let last = last.lock().map(|held| held.clone()).unwrap_or_default();
-    Err(if last.is_empty() {
+    let mut message = if last.is_empty() {
         format!("exited with {status}")
     } else {
         last
-    })
+    };
+    if let Some(file) = log.file_name()
+        && std::fs::metadata(log).is_ok_and(|meta| meta.len() > 0)
+    {
+        message.push_str(&format!("; full output: .stone/native/{}", file.to_string_lossy()));
+    }
+    Err(message)
 }
 
 /// A stderr line worth reporting: not blank, not a stack frame (Node's `at …`, Dart's `#3 …` and
-/// `<asynchronous suspension>`), and not the `Node.js v24.1.0` trailer a Node tool prints after
-/// its error when it crashes.
+/// `<asynchronous suspension>`), not the `Node.js v24.1.0` trailer a Node tool prints after
+/// its error when it crashes, and not a line of punctuation only: an object dump ends with `}`.
 fn telling(line: &str) -> bool {
     let line = line.trim();
     let dart_frame = line
         .strip_prefix('#')
         .is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_digit()));
-    !line.is_empty()
+    line.chars().any(char::is_alphanumeric)
         && !line.starts_with("at ")
         && !line.starts_with("Node.js v")
         && !dart_frame
@@ -714,10 +730,12 @@ pub fn native_with(
                         last: last.to_string(),
                     });
                 };
-                let result = run_indexer(indexer, &program, &root.join(dir), &out, timeout, &mut tick).and_then(|()| {
-                    let bytes = std::fs::read(&out).map_err(|err| format!("cannot read its index: {err}"))?;
-                    parse_scip(&bytes)
-                });
+                let log = scratch.join(format!("{}-{n}.log", indexer.name));
+                let result =
+                    run_indexer(indexer, &program, &root.join(dir), &out, &log, timeout, &mut tick).and_then(|()| {
+                        let bytes = std::fs::read(&out).map_err(|err| format!("cannot read its index: {err}"))?;
+                        parse_scip(&bytes)
+                    });
                 match result {
                     Ok(parsed) => {
                         ran.push(Fresh {

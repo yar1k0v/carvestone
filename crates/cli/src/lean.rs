@@ -262,9 +262,14 @@ pub fn item_text(text: &str) -> String {
             continue;
         };
         let repeats_created = created.as_deref().is_some_and(|date| {
+            // A timestamp repeats the day it was created on, so compare days, not whole values.
+            let day = date.get(..10).unwrap_or(date);
+            let same_day = value == day || value.strip_prefix(day).is_some_and(|rest| rest.starts_with('T'));
             key != "created"
                 && entry.len() == 1
-                && (value == date || (key == "generated" && value.contains(&format!("at: {date}"))))
+                && (same_day
+                    || (key == "generated"
+                        && (value.contains(&format!("at: {day}")) || value.contains(&format!("at: '{day}")))))
         });
         if key == "type" || (key == "priority" && value == "medium") || repeats_created {
             continue;
@@ -305,4 +310,45 @@ fn split_front_matter(text: &str) -> Option<(Vec<&str>, &str)> {
 /// `text` with trailing blank space gone and one final newline.
 pub fn with_newline(text: &str) -> String {
     format!("{}\n", text.trim_end())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::item_text;
+
+    #[test]
+    fn item_text_hides_dates_of_the_created_day() {
+        let cases = [
+            (
+                "plain days",
+                "created: 2026-11-01",
+                "generated: { by: claude-code, at: 2026-11-01 }",
+                false,
+            ),
+            (
+                "timestamps of one day",
+                "created: 2026-11-01T10:00:00+00:00",
+                "generated: { by: claude-code, at: '2026-11-01T10:00:05+00:00' }",
+                false,
+            ),
+            (
+                "plain created, timestamp generated",
+                "created: 2026-11-01",
+                "generated: { by: claude-code, at: '2026-11-01T18:00:00+00:00' }",
+                false,
+            ),
+            (
+                "another day",
+                "created: 2026-11-01T10:00:00+00:00",
+                "generated: { by: claude-code, at: '2026-11-02T09:00:00+00:00' }",
+                true,
+            ),
+        ];
+        for (what, created, generated, shown) in cases {
+            let text = format!("---\ntitle: A\n{created}\n{generated}\n---\n\nBody.\n");
+            let out = item_text(&text);
+            assert_eq!(out.contains("generated"), shown, "{what}: {out}");
+            assert!(out.contains(created), "{what}: {out}");
+        }
+    }
 }

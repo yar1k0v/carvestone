@@ -3,7 +3,7 @@
 use carvestone_core::{ItemType, Section, check_box, section_text, sections, set_section};
 use carvestone_store::{Document, Entry, StoreError};
 
-use crate::create::{Written, stamp_by, stamp_value, today};
+use crate::create::{Written, now, stamp_by, stamp_value, today};
 use crate::fields::{SetCtx, SetValue, apply_unset, apply_value, check_done_sections, sync_closed};
 use crate::query::etag_of;
 use crate::repo::{EngineError, Repo};
@@ -330,7 +330,7 @@ impl Repo {
             let touched =
                 doc.get_str("title") != title || doc.get_str("description") != description || doc.body != body;
             if touched {
-                doc.set("generated", stamp_value(&stamp_by(self)?, &today()))?;
+                doc.set("generated", stamp_value(&stamp_by(self)?, &now()))?;
             }
             Ok(())
         })

@@ -24,10 +24,10 @@ const TASK = itemView("tasks/CS-2", {
     status: "in-progress",
     milestone: "M-1",
     verified: [
-      { by: "human:yaroslav", at: "2026-10-16" },
+      { by: "human:yaroslav", at: "2026-10-16T12:00:00+00:00" },
       { by: "claude-code", at: "2026-10-20" },
     ],
-    generated: { by: "claude-code", at: "2026-10-01" },
+    generated: { by: "claude-code", at: "2026-10-01T09:00:00+00:00" },
   },
   body: "## Description\n\nDo it.\n",
   sections: [{ anchor: "description", title: "Description", level: 2, start_line: 8, end_line: 10 }],
@@ -66,7 +66,10 @@ describe("item page", () => {
     expect(within(verified).getAllByRole("listitem")).toHaveLength(2);
     expect(verified).toHaveTextContent("human:yaroslav");
     expect(verified).toHaveTextContent("claude-code");
-    expect(screen.getByRole("region", { name: "Generated" })).toHaveTextContent("2026-10-01");
+    expect(verified).not.toHaveTextContent("12:00");
+    const generated = screen.getByRole("region", { name: "Generated" });
+    expect(generated).toHaveTextContent("2026-10-01");
+    expect(generated).not.toHaveTextContent("09:00");
     // The badge is the engine's value, not recomputed from the stamps.
     expect(screen.getAllByText("human-reviewed").length).toBeGreaterThan(0);
   });

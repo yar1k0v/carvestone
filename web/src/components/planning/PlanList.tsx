@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { ListRow } from "@/api/types/ListRow";
 import { ErrorNotice } from "@/components/item/ErrorNotice";
+import { dayOf } from "@/components/item/stamps";
 import { AppLink } from "@/components/markdown/AppLink";
 import { Chips, PageHeader } from "@/components/ui/page";
 import { LoadingRows } from "@/components/ui/skeleton";
@@ -16,7 +17,7 @@ function PlanRow({ row }: { row: ListRow }) {
   return (
     <AppLink href={`/plans/${planRef(row)}`} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3 transition-colors hover:bg-accent/50">
       <span className="min-w-0 flex-[1_1_360px] font-medium">{row.title ?? row.id}</span>
-      <span className="w-[92px] text-right font-mono text-xs text-muted-foreground">{row.created}</span>
+      <span className="w-[92px] text-right font-mono text-xs text-muted-foreground">{row.created === undefined ? null : dayOf(row.created)}</span>
     </AppLink>
   );
 }
