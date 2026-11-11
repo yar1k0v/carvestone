@@ -2532,3 +2532,51 @@ fn render_renumbered(r: &Renumbered, dry_run: bool, json: bool) -> anyhow::Resul
     }
     Ok(out)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Cli;
+    use carvestone_engine::guide::{CLI_COMMANDS, CLI_NESTED};
+    use clap::{Command, CommandFactory};
+
+    /// Sorted subcommand names; clap's own `help` subcommand is not part of the CLI surface.
+    fn subcommand_names(cmd: &Command) -> Vec<String> {
+        let mut names: Vec<String> = cmd
+            .get_subcommands()
+            .map(|c| c.get_name().to_string())
+            .filter(|n| n != "help")
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn the_guide_lists_match_the_parser() {
+        let root = Cli::command();
+
+        let mut listed: Vec<String> = CLI_COMMANDS.iter().map(|s| s.to_string()).collect();
+        listed.sort();
+        assert_eq!(subcommand_names(&root), listed, "CLI_COMMANDS differs from the parser");
+
+        // Only the parents CLI_NESTED names are compared: the guide checker does not judge the others.
+        let mut parents: Vec<&str> = CLI_NESTED.iter().map(|(parent, _)| *parent).collect();
+        parents.sort();
+        parents.dedup();
+        for parent in parents {
+            let cmd = root
+                .find_subcommand(parent)
+                .unwrap_or_else(|| panic!("CLI_NESTED names `{parent}`, which the parser lacks"));
+            let mut listed: Vec<String> = CLI_NESTED
+                .iter()
+                .filter(|(p, _)| *p == parent)
+                .map(|(_, child)| child.to_string())
+                .collect();
+            listed.sort();
+            assert_eq!(
+                subcommand_names(cmd),
+                listed,
+                "CLI_NESTED differs from the parser for `{parent}`"
+            );
+        }
+    }
+}
