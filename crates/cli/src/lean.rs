@@ -8,10 +8,11 @@ use std::collections::{HashMap, HashSet};
 use carvestone_engine::code_entries::EntryRow;
 use carvestone_engine::query::ListRow;
 use carvestone_engine::search::Hit;
+use carvestone_engine::tiers::{self, Part};
 
 /// Tokens as `Hit::cost` counts them: chars / 4, rounded up.
 pub fn tokens(text: &str) -> usize {
-    text.chars().count().div_ceil(4)
+    tiers::tokens(text)
 }
 
 /// Renders `count` items so everything printed fits `budget`: the largest prefix
@@ -29,26 +30,27 @@ pub fn fit(budget: Option<usize>, count: usize, render: impl Fn(usize) -> String
     render(0)
 }
 
-/// Cuts printed text by whole lines so it costs about `budget` tokens: the first lines stay and one
-/// last line names how many lines and how many tokens were left out.
+/// Cuts printed text by whole lines so it fits `budget` tokens: the first line never goes, the rest
+/// shrinks, and one last line names how many lines and how many tokens were left out. An answer the
+/// budget does not cut is returned byte for byte.
 pub fn fit_lines(budget: Option<usize>, text: &str) -> String {
-    if budget.is_none() {
+    let Some(budget) = budget else {
         return text.to_string();
+    };
+    let mut lines = text.lines();
+    let Some(first) = lines.next() else {
+        return text.to_string();
+    };
+    let parts = vec![
+        Part::critical("first line", vec![first.to_string()]),
+        Part::optional("the rest", None, lines.map(str::to_string).collect()),
+    ];
+    let fitted = tiers::fit(&parts, Some(budget));
+    if fitted.left_out.is_empty() {
+        text.to_string()
+    } else {
+        fitted.text
     }
-    let lines: Vec<&str> = text.lines().collect();
-    fit(budget, lines.len(), |kept| {
-        let mut out: String = lines[..kept].iter().map(|line| format!("{line}\n")).collect();
-        let dropped = &lines[kept..];
-        if !dropped.is_empty() {
-            let noun = if dropped.len() == 1 { "line" } else { "lines" };
-            out.push_str(&format!(
-                "{} more {noun} left out, about {} tokens; raise --budget\n",
-                dropped.len(),
-                tokens(&dropped.join("\n"))
-            ));
-        }
-        out
-    })
 }
 
 /// `tasks/CS-1` is `CS-1` everywhere an agent types it; other ids print as they are.
@@ -137,15 +139,7 @@ pub fn symbol_lines(hits: &[Hit], detail: Detail, group: bool, seen: &mut HashSe
 /// One entry row: `target  kind  detail`, with `declared` after a kind the front matter names. The
 /// `declared` kind (not seen by detection) and `gone` stand alone.
 pub fn entry_line(row: &EntryRow) -> String {
-    let mut out = format!("{}  {}", row.target, row.kind);
-    if !row.detail.is_empty() {
-        out.push_str(&format!("  {}", row.detail));
-    }
-    if row.declared && row.kind != "declared" {
-        out.push_str("  declared");
-    }
-    out.push('\n');
-    out
+    format!("{}\n", row.line())
 }
 
 /// `explain`'s file rows: `path  L1-<n>`, the language once in the heading when most files share it,

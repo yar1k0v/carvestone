@@ -14,6 +14,7 @@ use lean::Detail;
 
 use carvestone_engine::agent_block::{self, AgentBlock};
 use carvestone_engine::arch_c4 as c4;
+use carvestone_engine::brief;
 use carvestone_engine::changed_files::changed_files_block;
 use carvestone_engine::code::{self, CodeQuery, CodeResult, Outline};
 use carvestone_engine::code_entries::{self, Entries};
@@ -36,6 +37,7 @@ use carvestone_engine::scan::{ScanOpts, ScanReport, ScanState, scan};
 use carvestone_engine::search::{SearchQuery, SearchResult, search};
 use carvestone_engine::service_map::{LibraryCode, ServiceCode};
 use carvestone_engine::session_hook;
+use carvestone_engine::tiers::{self, Part};
 use carvestone_engine::timeline::{self, Date, Event, EventKind, TimelineOpts, parse_date};
 use carvestone_engine::why::{self, Why};
 use carvestone_engine::{EngineError, Problem, Repo, Severity};
@@ -82,6 +84,14 @@ enum Command {
     Get {
         id: String,
         /// Cut the answer to about this many tokens (chars / 4); whole lines, first lines kept.
+        #[arg(long)]
+        budget: Option<usize>,
+    },
+    /// Everything a task needs to start, in one answer: the task, its links, entry points, outlines and precedents.
+    Brief {
+        /// The task id.
+        task: String,
+        /// Aim for about this many tokens instead of 2,000; the task and its links are never cut.
         #[arg(long)]
         budget: Option<usize>,
     },
@@ -914,6 +924,15 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::Get { id, budget } => {
             let text = render_get(&repo.get(&id)?, cli.json)?;
             print!("{}", lean::fit_lines(if cli.json { None } else { budget }, &text));
+        }
+        Command::Brief { task, budget } => {
+            let found = brief::brief(&repo, &task)?;
+            if cli.json {
+                print!("{}", pretty(&found)?);
+            } else {
+                let budget = Some(budget.unwrap_or(brief::DEFAULT_BUDGET));
+                print!("{}", tiers::fit(&found.parts, budget).text);
+            }
         }
         Command::List(args) => {
             let filter = ListFilter {
@@ -1893,20 +1912,21 @@ fn render_outline(result: &Outline, json: bool, full: bool, budget: Option<usize
     Ok(lean::fit(budget, result.entries.len(), |kept| {
         let mut out = format!("{}\n", result.path);
         for entry in &result.entries[..kept] {
-            let text = if !full {
-                entry.short.as_str()
-            } else if entry.signature.is_empty() {
+            if !full {
+                out.push_str(&format!("{}\n", entry.line()));
+                continue;
+            }
+            let text = if entry.signature.is_empty() {
                 entry.name.as_str()
             } else {
                 entry.signature.as_str()
             };
             // `export function f()` says its kind itself; a label in front would repeat it.
-            let said = full
-                && entry
-                    .signature
-                    .split(entry.name.as_str())
-                    .next()
-                    .is_some_and(|before| before.split_whitespace().any(|word| word == entry.kind));
+            let said = entry
+                .signature
+                .split(entry.name.as_str())
+                .next()
+                .is_some_and(|before| before.split_whitespace().any(|word| word == entry.kind));
             let label = if said {
                 String::new()
             } else {
@@ -1993,82 +2013,100 @@ fn render_explain(result: &Explain, json: bool, budget: Option<usize>) -> anyhow
     if json {
         return pretty(result);
     }
-    // The budget cuts key symbols first and files after them, as the engine orders them.
-    let keys = result.key_symbols.len();
-    let total = keys + result.files.len();
-    Ok(lean::fit(budget, total, |kept| {
-        let key_symbols = &result.key_symbols[..kept.min(keys)];
-        let files = &result.files[..kept.saturating_sub(keys)];
-        let mut out = format!("{}\n", result.target);
-        if !result.entries.is_empty() {
-            out.push_str("Entries:\n");
-            for row in &result.entries {
-                out.push_str(&lean::entry_line(row));
-            }
+    // Only the target and its entries are never cut; every other part shrinks to its share of the budget.
+    let mut target = vec![result.target.clone()];
+    if !result.entries.is_empty() {
+        target.push("Entries:".to_string());
+        for row in &result.entries {
+            target.push(lean::entry_line(row).trim_end_matches('\n').to_string());
         }
-        if !result.folders.is_empty() {
-            out.push_str("Folders:\n");
-            for row in &result.folders {
-                let noun = if row.files == 1 { "file" } else { "files" };
-                out.push_str(&format!("{}/  {} {noun}\n", row.folder, row.files));
-            }
-        }
-        if !result.folder_edges.is_empty() {
-            out.push_str("Between folders:\n");
-            for edge in &result.folder_edges {
-                out.push_str(&format!(
-                    "{} -> {}  {} exact, {} inferred\n",
-                    edge.from, edge.to, edge.exact, edge.inferred
-                ));
-            }
-        }
-        if !result.packages.is_empty() {
-            out.push_str(&format!("Packages: {}\n", result.packages.join(", ")));
-        }
-        if !result.libraries.is_empty() {
-            out.push_str("Libraries:\n");
-            for lib in &result.libraries {
-                let owner = lib.component.as_ref().map_or(String::new(), |c| format!("  ({c})"));
-                out.push_str(&format!("{}  {}/{owner}\n", lib.name, lib.folder));
-            }
-        }
-        if !files.is_empty() {
-            let (lang, rows) = lean::file_lines(files);
-            let lang = if lang.is_empty() { lang } else { format!(" ({lang})") };
-            out.push_str(&format!("Files{lang}:\n{rows}"));
-        }
-        if !key_symbols.is_empty() {
-            out.push_str("Key symbols:\n");
-            out.push_str(&lean::symbol_lines(key_symbols, Detail::Two, true, &mut HashSet::new()));
-        }
-        if !result.uses.is_empty() {
-            out.push_str("Uses:\n");
-            for link in &result.uses {
-                out.push_str(&format!("{}: {}\n", link.target, link.description));
-            }
-        }
-        for (title, list) in [("Depends on", &result.outbound), ("Used by", &result.inbound)] {
-            if !list.is_empty() {
-                out.push_str(&format!("{title}:\n"));
-                for dep in list {
-                    out.push_str(&format!(
-                        "{}  {} exact, {} inferred\n",
-                        dep.component, dep.exact, dep.inferred
-                    ));
-                }
-            }
-        }
-        for (title, list) in [("Tasks", &result.tasks), ("Docs", &result.docs)] {
-            if !list.is_empty() {
-                out.push_str(&format!("{title}: {}\n", list.join(", ")));
-            }
-        }
-        if out.lines().count() == 1 && total == 0 {
-            out.push_str("nothing indexed here: no files, symbols, links, tasks or docs\n");
-        }
-        out.push_str(&code_tail(result.omitted + (total - kept), result.note.as_deref()));
-        out
-    }))
+    }
+    let folders = result
+        .folders
+        .iter()
+        .map(|row| {
+            let noun = if row.files == 1 { "file" } else { "files" };
+            format!("{}/  {} {noun}", row.folder, row.files)
+        })
+        .collect();
+    let folder_edges = result
+        .folder_edges
+        .iter()
+        .map(|edge| {
+            format!(
+                "{} -> {}  {} exact, {} inferred",
+                edge.from, edge.to, edge.exact, edge.inferred
+            )
+        })
+        .collect();
+    let packages = if result.packages.is_empty() {
+        Vec::new()
+    } else {
+        vec![format!("Packages: {}", result.packages.join(", "))]
+    };
+    let libraries = result
+        .libraries
+        .iter()
+        .map(|lib| {
+            let owner = lib.component.as_ref().map_or(String::new(), |c| format!("  ({c})"));
+            format!("{}  {}/{owner}", lib.name, lib.folder)
+        })
+        .collect();
+    let (lang, rows) = lean::file_lines(&result.files);
+    let files_heading = if lang.is_empty() {
+        "Files:".to_string()
+    } else {
+        format!("Files ({lang}):")
+    };
+    let files = rows.lines().map(str::to_string).collect();
+    let symbols = lean::symbol_lines(&result.key_symbols, Detail::Two, true, &mut HashSet::new());
+    let symbols = symbols.lines().map(str::to_string).collect();
+    let uses = result
+        .uses
+        .iter()
+        .map(|link| format!("{}: {}", link.target, link.description))
+        .collect();
+    fn dependency(dep: &carvestone_engine::code_graph::Dependency) -> String {
+        format!("{}  {} exact, {} inferred", dep.component, dep.exact, dep.inferred)
+    }
+    let depends_on = result.outbound.iter().map(dependency).collect();
+    let used_by = result.inbound.iter().map(dependency).collect();
+    let tasks = if result.tasks.is_empty() {
+        Vec::new()
+    } else {
+        vec![format!("Tasks: {}", result.tasks.join(", "))]
+    };
+    let docs = if result.docs.is_empty() {
+        Vec::new()
+    } else {
+        vec![format!("Docs: {}", result.docs.join(", "))]
+    };
+    let mut parts = vec![
+        Part::critical("component", target),
+        Part::optional("folders", Some("Folders:"), folders),
+        Part::optional("folder edges", Some("Between folders:"), folder_edges),
+        Part::optional("packages", None, packages),
+        Part::optional("libraries", Some("Libraries:"), libraries),
+        Part::optional("files", Some(&files_heading), files),
+        Part::optional("key symbols", Some("Key symbols:"), symbols),
+        Part::optional("uses", Some("Uses:"), uses),
+        Part::optional("depends on", Some("Depends on:"), depends_on),
+        Part::optional("used by", Some("Used by:"), used_by),
+        Part::optional("tasks", None, tasks),
+        Part::optional("docs", None, docs),
+    ];
+    let nothing_indexed = parts[0].lines.len() == 1 && parts[1..].iter().all(|part| part.lines.is_empty());
+    let mut notes = Vec::new();
+    if nothing_indexed {
+        notes.push("nothing indexed here: no files, symbols, links, tasks or docs".to_string());
+    }
+    notes.extend(
+        code_tail(result.omitted, result.note.as_deref())
+            .lines()
+            .map(str::to_string),
+    );
+    parts.push(Part::critical("notes", notes));
+    Ok(tiers::fit(&parts, budget).text)
 }
 
 fn render_entries(result: &Entries, json: bool, budget: Option<usize>) -> anyhow::Result<String> {

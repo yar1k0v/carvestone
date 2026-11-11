@@ -2,7 +2,7 @@
 
 Walk one real task through stone with the owner, to find where tokens and turns go. The subject is your decision making, not the task. Change no code and no items.
 
-1. Run `stone task next`. Pick one ready task that crosses several parts of the code, and say why.
+1. Run `stone map`. Pick one ready task from it that crosses several parts of the code, and say why.
 2. Find out what the task needs: the related docs, the C4 architecture and where to start work. Use stone only.
 3. Run one stone call per step. Never batch calls in this session.
 4. After each call, print the step card below, then stop. Run the next call only when the owner says so. The owner may change it.

@@ -221,6 +221,39 @@ fn a_section_edit_refuses_to_drop_nested_sections() {
 }
 
 #[test]
+fn a_section_edit_refuses_a_text_that_repeats_the_heading() {
+    let store = Store::new();
+    let repo = store.repo();
+    let rows: [(&str, &str, &str, bool); 7] = [
+        ("the heading as sent", "description", "## Description\n\nNew.", true),
+        ("another case and level", "description", "# description\n\nNew.", true),
+        ("after a blank line", "description", "\n\n## Description\n\nNew.", true),
+        ("found by anchor", "notes", "## Notes\n\nNew.", true),
+        ("a different heading", "description", "## Other\n\nNew.", false),
+        (
+            "a sub-heading in the middle",
+            "description",
+            "New.\n\n### Description\n\nMore.",
+            false,
+        ),
+        ("plain text", "description", "New.", false),
+    ];
+
+    store.write("stone/tasks/CS-1.md", TASK);
+    for (what, name, text, refused) in rows {
+        let result = repo.edit("CS-1", &section(name, text), false);
+        if refused {
+            let err = result.err().unwrap_or_else(|| panic!("{what}: the edit passed"));
+            assert!(err.to_string().contains("starts with its own heading"), "{what}: {err}");
+            assert_eq!(store.read("stone/tasks/CS-1.md"), TASK, "{what}: nothing was written");
+        } else {
+            result.unwrap_or_else(|e| panic!("{what}: {e}"));
+            store.write("stone/tasks/CS-1.md", TASK);
+        }
+    }
+}
+
+#[test]
 fn the_same_edit_twice_gives_no_diff() {
     let store = Store::new();
     store.write("stone/tasks/CS-1.md", TASK);

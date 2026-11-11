@@ -1,6 +1,7 @@
 //! The built-in guide: every `stone` command a topic names is one the CLI has.
 
 use carvestone_core::{code_span_ranges, lines};
+use carvestone_engine::agent_block::block;
 use carvestone_engine::guide::{CLI_COMMANDS, CLI_NESTED, Topic, guide};
 
 /// The command in a backticked `stone ...` span that the CLI does not have, or `None`.
@@ -67,6 +68,71 @@ fn every_command_in_a_guide_topic_exists() {
     ] {
         assert_eq!(wrong_command(span).as_deref(), expected, "{span}");
     }
+}
+
+/// The commands the agent guides and the Stone block may name: the map, the brief, search, get
+/// and the writes. The read commands stay in the binary.
+const SURFACE: &[&str] = &[
+    "map",
+    "brief",
+    "search",
+    "get",
+    "new",
+    "edit",
+    "link",
+    "task",
+    "rename",
+    "delete",
+    "renumber",
+    "check",
+    "commit-msg",
+    "instructions",
+    "serve",
+];
+
+/// The span when it names a command outside the agent surface. `stone arch connect` is a write that
+/// the plan topic teaches, so it passes; `stone task next` is replaced by the map.
+fn off_surface(span: &str) -> Option<&str> {
+    if span.starts_with("stone task next") {
+        return Some(span);
+    }
+    if span.starts_with("stone arch connect") {
+        return None;
+    }
+    let name = span
+        .split_whitespace()
+        .nth(1)
+        .filter(|w| !w.starts_with(['-', '<', '[']))?;
+    (!SURFACE.contains(&name)).then_some(span)
+}
+
+// The block size goes to the test output, where `-- --nocapture` shows it.
+#[allow(clippy::print_stdout)]
+#[test]
+fn guides_name_only_the_agent_surface() {
+    let mut wrong = Vec::new();
+    for topic in ["overview", "plan", "do", "finish", "debug"] {
+        let text = guide(Topic::from_name(topic).expect("a topic"));
+        for span in stone_spans(text) {
+            if let Some(span) = off_surface(&span) {
+                wrong.push(format!("{topic}: {span}"));
+            }
+        }
+    }
+    let block = block();
+    for span in stone_spans(&block) {
+        if let Some(span) = off_surface(&span) {
+            wrong.push(format!("block: {span}"));
+        }
+    }
+    let tokens = block.chars().count().div_ceil(4);
+    println!("block: {tokens} tokens");
+    assert!(
+        wrong.is_empty(),
+        "guides name read commands outside the agent surface:\n{}",
+        wrong.join("\n")
+    );
+    assert!(tokens <= 470, "the block is {tokens} tokens");
 }
 
 #[test]

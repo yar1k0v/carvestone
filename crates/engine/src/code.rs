@@ -451,6 +451,19 @@ pub struct OutlineEntry {
     pub depth: u32,
 }
 
+impl OutlineEntry {
+    /// The printed row of the short outline: indent by depth, kind, header, then the lines.
+    pub fn line(&self) -> String {
+        let lines = if self.lines[0] == self.lines[1] {
+            format!("L{}", self.lines[0])
+        } else {
+            format!("L{}-{}", self.lines[0], self.lines[1])
+        };
+        let indent = "  ".repeat(self.depth as usize + 1);
+        format!("{indent}{} {}  {lines}", self.kind, self.short)
+    }
+}
+
 /// The declarations of a file, or of one symbol and what it holds, in line order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]

@@ -20,16 +20,15 @@ pub const FILES: [&str; 2] = ["CLAUDE.md", "AGENTS.md"];
 /// The command that adds or refreshes the block.
 pub const REFRESH: &str = "stone instructions --write";
 
-/// Question and the commands that answer it. The guide test checks that every command the
-/// overview names appears here, so a new capability reaches the block.
+/// Question and the commands that answer it: the map, the brief, search, get and the writes. Other read commands stay out, and the guide test checks it.
 const TABLE: &[(&str, &str)] = &[
-    ("Find something by its words", "`stone search \"words\" --budget 200`"),
+    ("What the project holds and what is ready", "`stone map`"),
+    ("Everything one task needs to start", "`stone brief <task>`"),
+    ("Find something by its words", "`stone search \"words\"`"),
     (
         "Read an item, or one section of it",
         "`stone get <id>`, `stone get <id>#<section>`",
     ),
-    ("List items", "`stone list --type task --status todo`"),
-    ("Which task is ready next", "`stone task next`"),
     (
         "Take a task, finish it",
         "`stone task move <id> in-progress`, `stone task move <id> done`",
@@ -50,26 +49,6 @@ const TABLE: &[(&str, &str)] = &[
         "Create, change or link an item",
         "`stone new <type> --title \"...\"`, `stone edit <id> --set key=value`, `stone link <from> <to>`",
     ),
-    ("Where a type or function is defined", "`stone code find <Name>`"),
-    ("What a file declares", "`stone code outline <file>`"),
-    ("Who calls or references a name", "`stone code uses <name>`"),
-    ("What a change would break", "`stone code impact <name>`"),
-    (
-        "How a component or a folder works",
-        "`stone code explain <component or folder>`",
-    ),
-    ("Where execution starts", "`stone code entries`"),
-    (
-        "What the product is made of, and how one container is built",
-        "`stone arch hld`, `stone arch lld <container>`",
-    ),
-    ("Exact code edges", "`stone code native`"),
-    ("Which folder holds each service", "`stone arch map`"),
-    ("Components for code nobody owns", "`stone scan`"),
-    ("Why a file or line exists", "`stone why <path>[:line]`"),
-    ("Finished tasks like this one", "`stone precedents <task>`"),
-    ("What touched an item", "`stone history <id>`"),
-    ("What happened lately", "`stone timeline`"),
     ("The `Refs:` line for a commit", "`stone commit-msg`"),
     ("Is the store valid", "`stone check`"),
     ("Two files share a number", "`stone renumber <path>`"),

@@ -44,6 +44,20 @@ pub struct EntryRow {
     pub declared: bool,
 }
 
+impl EntryRow {
+    /// The printed row: `target  kind  detail`, with `declared` when the list names it too.
+    pub fn line(&self) -> String {
+        let mut out = format!("{}  {}", self.target, self.kind);
+        if !self.detail.is_empty() {
+            out.push_str(&format!("  {}", self.detail));
+        }
+        if self.declared && self.kind != DECLARED {
+            out.push_str("  declared");
+        }
+        out
+    }
+}
+
 /// The entries of the repository grouped by the component that owns their file.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]

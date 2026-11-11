@@ -64,7 +64,7 @@ pub struct Precedent {
 }
 
 impl Precedent {
-    fn line(&self) -> String {
+    pub(crate) fn line(&self) -> String {
         let mut line = self.id.clone();
         if let Some(title) = &self.title {
             line.push_str("  ");
@@ -262,7 +262,7 @@ pub fn precedents(repo: &Repo, lookup: &Lookup) -> Result<Precedents, EngineErro
     Ok(result)
 }
 
-fn is_task(entry: &Entry) -> bool {
+pub(crate) fn is_task(entry: &Entry) -> bool {
     entry.item.as_ref().and_then(|i| i.item_type()) == Some(ItemType::Task)
 }
 

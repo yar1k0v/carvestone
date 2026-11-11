@@ -168,6 +168,22 @@ fn dropped_nested(body: &str, name: &str, text: &str) -> Option<(String, Vec<Str
     (!dropped.is_empty()).then(|| (section.title.clone(), dropped))
 }
 
+/// The section and its heading line, when `text` starts with a heading that names the section
+/// itself. Stone keeps the heading, so a heading in the text would be written twice.
+fn repeated_heading(body: &str, name: &str, text: &str) -> Option<(String, String)> {
+    let line = text.lines().find(|l| !l.trim().is_empty())?;
+    let hashes = line.chars().take_while(|&c| c == '#').count();
+    if !(1..=6).contains(&hashes) || !line[hashes..].starts_with(' ') {
+        return None;
+    }
+    let title = line[hashes..].trim();
+    let name = name.trim();
+    let all = sections(body, 1);
+    let own = find_section(&all, name).map_or(name, |s| s.title.as_str());
+    (title.eq_ignore_ascii_case(name) || title.eq_ignore_ascii_case(own))
+        .then(|| (own.to_string(), line.trim().to_string()))
+}
+
 /// `set_section`, except that text the section already holds leaves the body alone.
 fn replace_section(body: &str, name: &str, text: &str) -> String {
     let flat = |t: &str| t.trim().replace("\r\n", "\n");
@@ -281,6 +297,11 @@ impl Repo {
                 apply_unset(doc, key)?;
             }
             if let Some((name, text)) = &req.section {
+                if let Some((section, line)) = repeated_heading(&doc.body, name, text) {
+                    return Err(EngineError::Invalid(format!(
+                        "the text for section `{section}` starts with its own heading `{line}`; Stone keeps the heading, so send the body only"
+                    )));
+                }
                 if !req.replace_nested
                     && let Some((section, dropped)) = dropped_nested(&doc.body, name, text)
                 {

@@ -216,6 +216,7 @@ pub const CLI_COMMANDS: &[&str] = &[
     "search",
     "code",
     "map",
+    "brief",
     "scan",
     "init",
     "new",

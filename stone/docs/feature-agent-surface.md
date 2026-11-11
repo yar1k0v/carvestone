@@ -18,7 +18,7 @@ Status: live (read surface changes planned, ADR-21)
 - Every command takes `--json`. Writes take `--dry-run`.
 - `stone search <words>` finds sections of docs, tasks, plans, decisions, architecture items and code symbols. It ranks by BM25 and boosts items linked to `--from` or `--component` ([[ADR-7]]).
 - A hit costs about 40 tokens. `--budget N` caps the output. `stone get <id>#<anchor>` expands one section.
-- `stone instructions [topic]` prints a guide: overview, plan, do, finish, debug or design.
+- `stone instructions [topic]` prints a guide: overview, plan, do, finish, debug or design. The guides name only the map, the brief, search, get and the writes.
 - `stone instructions --write` adds the Stone block to `CLAUDE.md` or `AGENTS.md`.
 - `stone init` offers a Claude Code SessionStart hook that prints `stone map`; `stone map --install-hook` adds it later. The Stone block tells other agents to run `stone map` first.
 - `stone mcp` serves `search`, `get`, `list` and `code` over MCP, for clients that cannot run a shell. Nothing turns it on by default.
@@ -58,6 +58,6 @@ Status: live (read surface changes planned, ADR-21)
 | Project map at the start of a session | live | [[CS-231]] |
 | Task brief and task pack: `stone brief` | planned | [[CS-202]] |
 | Ready check before a task counts as ready | planned | [[CS-233]] |
-| Agent guide with two pushes, two pulls and the writes | planned | [[CS-234]] |
+| Agent guide with two pushes, two pulls and the writes | live | [[CS-234]] |
 | Freshness proof on each item or section | planned | no task yet |
 | Tokens, turns and first-review result per task | planned | no task yet |

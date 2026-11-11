@@ -188,6 +188,21 @@ fn typical_calls_stay_under_their_bars() {
             args: &["code", "explain", "arch/shop"],
             bar: 324,
         },
+        Call {
+            label: "instructions",
+            args: &["instructions"],
+            bar: 500,
+        },
+        Call {
+            label: "instructions do",
+            args: &["instructions", "do"],
+            bar: 520,
+        },
+        Call {
+            label: "instructions plan",
+            args: &["instructions", "plan"],
+            bar: 580,
+        },
     ];
     let repo = Repo::new();
     let mut over = Vec::new();
@@ -257,10 +272,28 @@ fn budget_output_stays_within_the_budget() {
             assert!(tokens <= budget, "{label} printed {tokens} tokens");
         }
     }
+    // The brief aims for 2,000 tokens when no budget is given, and keeps the task whole.
+    let (code, out) = repo.run(&["brief", "CS-4"]);
+    assert_eq!(code, 0, "{out}");
+    let tokens = out.chars().count().div_ceil(4);
+    assert!(tokens <= 2000, "brief printed {tokens} tokens");
+    assert!(
+        out.lines()
+            .any(|line| line == "- [ ] the morning report lists every queue"),
+        "no last criterion in:\n{out}"
+    );
     let (code, out) = repo.run(&["get", "CS-1", "--budget", "50"]);
     assert_eq!(code, 0, "{out}");
     assert!(
         out.lines().last().unwrap_or_default().ends_with("; raise --budget"),
         "no cut-off line in:\n{out}"
+    );
+    let (code, out) = repo.run(&["code", "explain", "arch/shop", "--budget", "60"]);
+    assert_eq!(code, 0, "{out}");
+    assert_eq!(out.lines().next().unwrap_or_default(), "arch/shop", "{out}");
+    let last = out.lines().last().unwrap_or_default();
+    assert!(
+        last.starts_with("left out: ") && last.contains("about") && last.ends_with("; raise --budget"),
+        "no tier notice in:\n{out}"
     );
 }

@@ -238,6 +238,7 @@ fn every_command_answers_on_a_small_store() {
             (&["history", "CS-1"], 0, "CS-1 has no commits yet"),
             (&["timeline"], 0, "no events"),
             (&["precedents", "CS-1"], 0, "no finished task made a similar change"),
+            (&["brief", "CS-1"], 0, "CS-1  First task  in-progress"),
         ],
     );
 
@@ -330,6 +331,11 @@ fn errors() {
             (&["rename", "docs/nope", "docs/x"], 1, "✗ docs/nope not found"),
             (&["history", "nope"], 1, "✗ nope not found"),
             (&["code", "explain", "arch/nope"], 1, "✗ arch/nope not found"),
+            (
+                &["brief", "docs/guide"],
+                1,
+                "✗ docs/guide is not a task; give a task id, for example CS-12",
+            ),
             (
                 &["why", "src/util.rs"],
                 1,
