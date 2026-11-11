@@ -90,6 +90,10 @@ pub struct PatchRequest {
     pub unset: Vec<String>,
     #[cfg_attr(feature = "ts", ts(optional))]
     pub section: Option<SectionEdit>,
+    /// Replace the section although it holds sub-sections the new text does not carry.
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
+    pub replace_nested: bool,
     /// The 1-based checkbox of `## Acceptance criteria` to tick.
     #[cfg_attr(feature = "ts", ts(optional))]
     pub check_ac: Option<usize>,

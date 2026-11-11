@@ -17,7 +17,7 @@ Status: live
 
 - Each element is a file in `stone/arch/`, nested by folder ([[ADR-8]]).
 - Fields: `code` globs, `entry`, `technology`, `uses`, `libraries`, `status`. Sections: Responsibilities, Uses, Interfaces, Gotchas.
-- `code` globs make every file belong to one element. The element below wins when two globs match.
+- Ownership: each tracked code file under `code_roots` belongs to exactly one element, and the element below wins when two globs match. `stone check` reports a code file that no element owns, or that two elements own when neither is below the other. Files that Stone does not read as code (art, config, docs) need no owner.
 - People and agents write each connection: from, to, what it does, and a protocol. Agents write data, never layout ([[ADR-20]]).
 - The web UI shows two diagrams. System architecture is C4 level 1. Solution architecture is level 2. A click on a container opens its level 3 diagram ([[ADR-18]]).
 - `stone arch hld` prints the high-level design. `stone arch lld <container>` prints one container ([[ADR-13]]).

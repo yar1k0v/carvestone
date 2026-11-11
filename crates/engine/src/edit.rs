@@ -1,6 +1,6 @@
 //! Changing items: `edit`, and the locked read-modify-write every writer shares.
 
-use carvestone_core::{ItemType, check_box, section_text, sections, set_section};
+use carvestone_core::{ItemType, Section, check_box, section_text, sections, set_section};
 use carvestone_store::{Document, Entry, StoreError};
 
 use crate::create::{Written, stamp_by, stamp_value, today};
@@ -15,7 +15,10 @@ pub struct Edit {
     pub set: Vec<(String, SetValue)>,
     pub unset: Vec<String>,
     pub section: Option<(String, String)>,
-    pub check_ac: Option<usize>,
+    /// Replace the section although it holds sub-sections the new text does not carry.
+    pub replace_nested: bool,
+    /// The 1-based checkboxes of `## Acceptance criteria` to tick.
+    pub check_ac: Vec<usize>,
     /// One line to add under `## Notes`, dated today.
     pub note: Option<String>,
 }
@@ -142,16 +145,35 @@ impl Repo {
     }
 }
 
+/// The section a name points at: a title first, then an anchor, both ignoring ASCII case.
+fn find_section<'a>(all: &'a [Section], name: &str) -> Option<&'a Section> {
+    let name = name.trim();
+    all.iter()
+        .find(|s| s.title.eq_ignore_ascii_case(name))
+        .or_else(|| all.iter().find(|s| s.anchor == name.to_lowercase()))
+}
+
+/// The title of the section `name` points at, with the titles of its sub-sections that `text`
+/// does not carry, in document order. `None` when the section is missing or holds none.
+fn dropped_nested(body: &str, name: &str, text: &str) -> Option<(String, Vec<String>)> {
+    let all = sections(body, 1);
+    let section = find_section(&all, name)?;
+    let new = sections(text, 1);
+    let dropped: Vec<String> = all
+        .iter()
+        .filter(|s| s.start_line > section.start_line && s.end_line <= section.end_line)
+        .filter(|s| !new.iter().any(|n| n.title.eq_ignore_ascii_case(&s.title)))
+        .map(|s| s.title.clone())
+        .collect();
+    (!dropped.is_empty()).then(|| (section.title.clone(), dropped))
+}
+
 /// `set_section`, except that text the section already holds leaves the body alone.
 fn replace_section(body: &str, name: &str, text: &str) -> String {
     let flat = |t: &str| t.trim().replace("\r\n", "\n");
     let name = name.trim();
     let all = sections(body, 1);
-    let found = all
-        .iter()
-        .find(|s| s.title.eq_ignore_ascii_case(name))
-        .or_else(|| all.iter().find(|s| s.anchor == name.to_lowercase()));
-    if let Some(section) = found {
+    if let Some(section) = find_section(&all, name) {
         let held = section_text(body, 1, section)
             .split_once('\n')
             .map_or("", |(_, rest)| rest);
@@ -235,7 +257,7 @@ impl Repo {
         if req.set.is_empty()
             && req.unset.is_empty()
             && req.section.is_none()
-            && req.check_ac.is_none()
+            && req.check_ac.is_empty()
             && req.note.is_none()
         {
             return Err(EngineError::Invalid(
@@ -259,9 +281,19 @@ impl Repo {
                 apply_unset(doc, key)?;
             }
             if let Some((name, text)) = &req.section {
+                if !req.replace_nested
+                    && let Some((section, dropped)) = dropped_nested(&doc.body, name, text)
+                {
+                    let noun = if dropped.len() == 1 { "sub-section" } else { "sub-sections" };
+                    return Err(EngineError::Invalid(format!(
+                        "section `{section}` holds {} {noun} the new text does not carry ({}); edit each by name, or pass --replace-nested to replace them all",
+                        dropped.len(),
+                        dropped.join(", ")
+                    )));
+                }
                 doc.body = replace_section(&doc.body, name, text);
             }
-            if let Some(n) = req.check_ac {
+            for &n in &req.check_ac {
                 doc.body = check_box(&doc.body, "Acceptance criteria", n)?;
             }
             if let Some(text) = &req.note {

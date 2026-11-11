@@ -63,7 +63,8 @@ pub(crate) async fn patch_item(
         set: values(body.set),
         unset: body.unset,
         section: body.section.map(|s| (s.name, s.text)),
-        check_ac: body.check_ac,
+        replace_nested: body.replace_nested,
+        check_ac: body.check_ac.into_iter().collect(),
         note: body.note,
     };
     let if_match = wanted_etag(&headers, body.if_match)?;

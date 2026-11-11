@@ -6,7 +6,7 @@ status: done
 milestone: M-3
 links: [M-3, ADR-1, ADR-7, ADR-8, ADR-10, ADR-11, docs/prd, plans/v1-roadmap]
 created: 2026-10-25
-generated: { by: claude-code, at: 2026-11-07 }
+generated: { by: claude-code, at: 2026-11-11 }
 ---
 
 ## Summary
@@ -119,13 +119,13 @@ Acceptance criteria:
 
 ### FR-8 Component graph and drift
 
-File ownership comes from component `code` globs (existing). A component edge A to B exists when at least one exact or inferred code edge goes from a file owned by A to a file owned by B (A not B; drafts count as components). `get` of a system, container or component shows `Code dependencies:` with B, edge count and the first site, next to the curated `uses`. `check` prints warnings, which do not change the exit code (`--strict` makes warnings fail): `arch-drift: arch/x depends on arch/y in code (12 edges, first src/a.cs:30) but does not list it in uses` and `arch-drift: arch/x lists arch/y in uses but no code edge exists`. Drift only counts edges whose both ends are owned.
+File ownership comes from component `code` globs (existing). A component edge A to B exists when at least one exact or inferred code edge goes from a file owned by A to a file owned by B (A not B; drafts count as components). `get` of a system, container or component shows `Code dependencies:` with B, edge count and the first site, next to the curated `uses`. `check` prints warnings, which do not change the exit code (`--strict` makes warnings fail): `arch-drift: arch/x depends on arch/y in code (12 edges, first src/a.cs:30) but does not list it in uses` and `arch-drift: arch/x lists arch/y in uses but no code edge exists`. Drift only counts edges whose both ends are owned. An inferred-only component edge gives no `depends on` warning; it still shows under `Code dependencies:` with `inferred only`, and it still backs a `uses` entry.
 
 Acceptance criteria:
 - AC-8.1 Given an import from A's file to B's file and `uses: []`, when `check` runs, then the first message appears for A and exit is 0.
 - AC-8.2 Given the same with `--strict`, when run, then exit is 1.
 - AC-8.3 Given `uses: [arch/b]` and no code edge, when `check` runs, then the second message appears.
-- AC-8.4 Given only inferred edges, when drift is computed, then they count (a note says `inferred only`).
+- AC-8.4 Given only inferred edges from A to B, when `check` runs, then no `arch-drift` warning appears for A, with or without B in `uses`, and `get` shows the dependency with `inferred only`.
 
 ### FR-9 Rust
 

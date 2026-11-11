@@ -17,4 +17,8 @@ direction: string, truncated: boolean,
 /**
  * Steps at the end of the chain the limit or the budget left out.
  */
-omitted?: number, note?: string, };
+omitted?: number, note?: string, 
+/**
+ * Set only on an empty answer: what is indexed, what is not, and the grep command to run next.
+ */
+gap?: string, };

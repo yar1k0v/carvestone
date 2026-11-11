@@ -7,6 +7,7 @@ use carvestone_index::Index;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 
+use crate::code_gap;
 use crate::code_index::building_note;
 use crate::code_rank::rank;
 use crate::refresh::{BATCH_FILES, refresh_in};
@@ -52,6 +53,10 @@ pub struct CodeResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub note: Option<String>,
+    /// Set only on an empty answer: what is indexed, what is not, and the grep command to run next.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub gap: Option<String>,
 }
 
 /// What a target resolved to: the symbol rows sharing one qualified name, or
@@ -237,6 +242,7 @@ fn result(conn: &Connection, q: &CodeQuery, query: String, hits: Vec<Hit>) -> Re
         truncated: omitted > 0,
         omitted,
         note: building_note(conn)?,
+        gap: None,
     })
 }
 
@@ -278,6 +284,9 @@ pub fn find(repo: &Repo, q: &CodeQuery) -> Result<CodeResult, EngineError> {
         })?
         .collect::<Result<_, _>>()?;
     let mut found = result(conn, q, text.to_string(), hits)?;
+    if found.hits.is_empty() {
+        found.gap = Some(code_gap::gap(conn, code_gap::Asked::Store, &[text])?);
+    }
     // A building note wins: the index may fill in soon.
     if found.hits.is_empty() && found.note.is_none() && repo.store.config.code_roots.is_empty() {
         found.note = Some(NO_ROOTS_NOTE.to_string());
@@ -415,8 +424,16 @@ fn edge_query(repo: &Repo, q: &CodeQuery, incoming: bool) -> Result<CodeResult, 
             .then_with(|| a.hit.id.cmp(&b.hit.id))
             .then_with(|| a.line.cmp(&b.line))
     });
-    let hits = ordered.into_iter().map(|f| f.hit).collect();
-    result(conn, q, target.label, hits)
+    let hits: Vec<Hit> = ordered.into_iter().map(|f| f.hit).collect();
+    // The gap reads the target, so it is built before the label moves into the answer.
+    let gap = if hits.is_empty() {
+        Some(code_gap::of_target(conn, &target)?)
+    } else {
+        None
+    };
+    let mut answer = result(conn, q, target.label, hits)?;
+    answer.gap = gap;
+    Ok(answer)
 }
 
 /// One declaration of an outline, `depth` levels inside the outermost one shown.
@@ -448,6 +465,10 @@ pub struct Outline {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub note: Option<String>,
+    /// Set only on an empty answer: what is indexed, what is not, and the grep command to run next.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub gap: Option<String>,
 }
 
 /// The outline of a file (every declaration in it) or of a symbol (it and everything inside it),
@@ -531,11 +552,18 @@ pub fn outline(repo: &Repo, q: &CodeQuery) -> Result<Outline, EngineError> {
     let limit = if q.limit == 0 { usize::MAX } else { q.limit };
     let omitted = entries.len().saturating_sub(limit);
     entries.truncate(limit);
+    // Built before the target moves into the answer.
+    let gap = if entries.is_empty() {
+        Some(code_gap::of_target(conn, &target)?)
+    } else {
+        None
+    };
     Ok(Outline {
         query: target.label,
         path,
         entries,
         omitted,
         note: building_note(conn)?,
+        gap,
     })
 }

@@ -544,6 +544,20 @@ fn walk_sites(
             }
             return;
         }
+        // A const or static read is a bare identifier; the naming convention
+        // keeps locals and functions out.
+        "identifier" => {
+            let name = text(node, src).trim();
+            if is_const_name(name) {
+                push_reference(out, name.to_string(), None, node);
+            }
+            return;
+        }
+        "const_item" | "static_item" | "const_parameter" => {
+            if let Some(child) = node.child_by_field_name("name") {
+                skip.push(child.id());
+            }
+        }
         "impl_item" => {
             for field in ["type", "trait"] {
                 if let Some(child) = node.child_by_field_name(field) {
@@ -572,6 +586,15 @@ fn walk_sites(
             walk_sites(child, src, out, imports, warnings, depth + 1);
         }
     }
+}
+
+/// `SCREAMING_SNAKE` names: at least 2 characters, an uppercase first letter.
+fn is_const_name(name: &str) -> bool {
+    name.len() >= 2
+        && name.starts_with(|c: char| c.is_ascii_uppercase())
+        && name
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
 }
 
 /// What a call's callee contributes besides the call itself: a method call's

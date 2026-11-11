@@ -8,4 +8,8 @@ export type Outline = { query: string, path: string, entries: Array<OutlineEntry
 /**
  * How many entries the limit left out.
  */
-omitted?: number, note?: string, };
+omitted?: number, note?: string, 
+/**
+ * Set only on an empty answer: what is indexed, what is not, and the grep command to run next.
+ */
+gap?: string, };

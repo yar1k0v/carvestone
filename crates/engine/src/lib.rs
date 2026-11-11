@@ -20,6 +20,7 @@ mod check_links;
 pub mod code;
 pub mod code_domain;
 pub mod code_entries;
+mod code_gap;
 pub mod code_graph;
 pub mod code_index;
 mod code_map;

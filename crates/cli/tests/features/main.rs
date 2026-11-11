@@ -130,6 +130,28 @@ fn every_command_answers_on_a_small_store() {
                 "docs/guide#install  L9-11  doc  Run the installer with sudo.",
             ),
             (&["edit", "CS-1", "--set", "priority=high"], 0, "updated CS-1"),
+            (
+                &["edit", "CS-1", "--section", "notes", "--text", "n", "--replace-nested"],
+                0,
+                "updated CS-1",
+            ),
+            (
+                &[
+                    "edit",
+                    "CS-1",
+                    "--section",
+                    "acceptance-criteria",
+                    "--text",
+                    "- [ ] a\n- [ ] b",
+                ],
+                0,
+                "updated CS-1",
+            ),
+            (
+                &["edit", "CS-1", "--check-ac", "1", "--check-ac", "2"],
+                0,
+                "updated CS-1",
+            ),
             (&["link", "CS-1", "docs/guide"], 0, "updated CS-1"),
             (&["task", "next"], 0, "CS-1  high  First task"),
             (&["task", "move", "CS-1", "in-progress"], 0, "updated CS-1"),
@@ -145,7 +167,7 @@ fn every_command_answers_on_a_small_store() {
                 0,
                 "  function helper() : u32  L1-3",
             ),
-            (&["code", "uses", "helper"], 0, "nothing uses util::helper"),
+            (&["code", "uses", "helper"], 0, "next: git grep -n -F -e \"helper\""),
             (&["code", "deps", "util"], 0, "util depends on nothing"),
             (&["code", "impact", "helper"], 0, "nothing depends on util::helper"),
             (
@@ -157,6 +179,7 @@ fn every_command_answers_on_a_small_store() {
             (&["code", "explain", "arch/util"], 0, "src/util.rs  L1-3"),
             (&["arch", "hld"], 0, "HLD"),
             (&["arch", "lld", "arch/api"], 0, "LLD arch/api  Api"),
+            (&["arch", "lld", "arch/api", "--budget", "400"], 0, "LLD arch/api  Api"),
             (&["scan"], 0, "0 written, 0 unchanged"),
             (
                 &["map"],

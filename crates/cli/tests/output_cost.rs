@@ -203,11 +203,18 @@ fn typical_calls_stay_under_their_bars() {
 #[test]
 fn budget_output_stays_within_the_budget() {
     let repo = Repo::new();
-    let calls: [&[&str]; 4] = [
+    let calls: [&[&str]; 11] = [
         &["search", "reconcile ledger"],
         &["code", "uses", "Shop.Ledger.Post"],
         &["code", "impact", "Shop.Ledger.Post"],
         &["code", "explain", "arch/shop"],
+        &["get", "CS-1"],
+        &["get", "docs/ledger-1"],
+        &["list"],
+        &["arch", "hld"],
+        &["instructions"],
+        &["history", "CS-1"],
+        &["timeline"],
     ];
     for budget in [50, 100, 200, 400] {
         let b = budget.to_string();
@@ -219,4 +226,10 @@ fn budget_output_stays_within_the_budget() {
             assert!(tokens <= budget, "{label} printed {tokens} tokens");
         }
     }
+    let (code, out) = repo.run(&["get", "CS-1", "--budget", "50"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.lines().last().unwrap_or_default().ends_with("; raise --budget"),
+        "no cut-off line in:\n{out}"
+    );
 }

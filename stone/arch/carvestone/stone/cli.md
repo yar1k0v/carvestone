@@ -5,10 +5,10 @@ description: The stone binary; it parses arguments and renders results.
 status: stable
 technology: Rust
 code: ['crates/cli/**']
-uses: [arch/carvestone/stone/core, arch/carvestone/stone/engine, arch/carvestone/stone/mcp, arch/carvestone/stone/server]
+uses: [arch/carvestone/stone/engine, arch/carvestone/stone/mcp, arch/carvestone/stone/server]
 parent: arch/carvestone/stone
 created: 2026-10-25
-generated: { by: claude-code, at: 2026-11-05 }
+generated: { by: claude-code, at: 2026-11-11 }
 ---
 
 ## Responsibilities
@@ -25,7 +25,6 @@ Errors print one line starting with a cross mark and exit 1; usage mistakes exit
 
 ## Uses
 
-- [[arch/carvestone/stone/core]]: Parses ids and item fields
 - [[arch/carvestone/stone/engine]]: Runs every command
 - [[arch/carvestone/stone/mcp]]: Serves the read-only tools
 - [[arch/carvestone/stone/server]]: Starts the browser server

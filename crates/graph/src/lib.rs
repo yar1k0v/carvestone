@@ -25,7 +25,7 @@ mod ts;
 /// Bump this whenever extraction or resolution output changes (a new fact, a
 /// different qname, an edge rule). A stored index with another value drops its
 /// code rows on the next refresh and fills them again.
-pub const CODE_GRAPH_VERSION: u32 = 16;
+pub const CODE_GRAPH_VERSION: u32 = 17;
 
 pub use dispatch::dispatch;
 pub use facts::{Decl, DeclKind, FileFacts, ImportDecl, Lang, RefKind, RefSite, Warning, is_test_path, lang_of};

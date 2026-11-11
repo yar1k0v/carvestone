@@ -71,7 +71,12 @@ enum Command {
         syntax: bool,
     },
     /// Print an item, or one section with `<id>#<anchor>`.
-    Get { id: String },
+    Get {
+        id: String,
+        /// Cut the answer to about this many tokens (chars / 4); whole lines, first lines kept.
+        #[arg(long)]
+        budget: Option<usize>,
+    },
     /// List items.
     List(ListArgs),
     /// Find sections by words: `<id>#<anchor>  L<lines>  <type>  <snippet>` per hit.
@@ -155,6 +160,9 @@ enum Command {
         /// Leave the diffs out.
         #[arg(long)]
         no_diff: bool,
+        /// Cut the answer to about this many tokens (chars / 4); whole lines, first lines kept.
+        #[arg(long)]
+        budget: Option<usize>,
     },
     /// Commits, finished tasks, accepted decisions and doc edits, newest first.
     Timeline {
@@ -173,6 +181,9 @@ enum Command {
         /// Most events to show.
         #[arg(long, default_value_t = 30)]
         limit: usize,
+        /// Cut the answer to about this many tokens (chars / 4); whole lines, first lines kept.
+        #[arg(long)]
+        budget: Option<usize>,
     },
     /// Create the stone/ folder in the current directory.
     Init {
@@ -263,6 +274,9 @@ enum Command {
         /// Add the stone block to CLAUDE.md or AGENTS.md, or refresh it between its markers.
         #[arg(long)]
         write: bool,
+        /// Cut the answer to about this many tokens (chars / 4); whole lines, first lines kept.
+        #[arg(long)]
+        budget: Option<usize>,
     },
 }
 
@@ -398,12 +412,15 @@ struct EditArgs {
     section: Option<String>,
     #[arg(long, requires = "section", allow_hyphen_values = true)]
     text: Option<String>,
-    /// Tick the Nth checkbox under Acceptance criteria.
+    /// Tick the Nth checkbox under Acceptance criteria; repeat for more.
     #[arg(long)]
-    check_ac: Option<usize>,
+    check_ac: Vec<usize>,
     /// Add a dated bullet to ## Notes; the same text twice adds it once.
     #[arg(long, allow_hyphen_values = true)]
     note: Option<String>,
+    /// Replace the section although it holds sub-sections the new text does not carry.
+    #[arg(long, requires = "section")]
+    replace_nested: bool,
     /// Print the resulting file and write nothing.
     #[arg(long)]
     dry_run: bool,
@@ -422,6 +439,9 @@ struct ListArgs {
     /// Only items that need another look (docs, references and arch items).
     #[arg(long)]
     stale: bool,
+    /// Cut the answer to about this many tokens (chars / 4); whole lines, first lines kept.
+    #[arg(long)]
+    budget: Option<usize>,
 }
 
 #[derive(Args)]
@@ -458,15 +478,26 @@ enum C4Level {
 #[derive(Subcommand)]
 enum ArchCommand {
     /// The high-level design: systems and containers, how they connect, and the docs marked `level: hld`.
-    Hld,
+    Hld {
+        /// Cut the answer to about this many tokens (chars / 4); whole lines, first lines kept.
+        #[arg(long)]
+        budget: Option<usize>,
+    },
     /// The low-level design of one container: its service view and the docs marked `level: lld` that link it.
     Lld {
         /// A container id such as arch/api.
         container: String,
+        /// Cut the answer to about this many tokens (chars / 4); whole lines, first lines kept.
+        #[arg(long)]
+        budget: Option<usize>,
     },
     /// What the design lacks: containers with no code, code with no owner, parts with no connection or doc,
     /// connections with no phrase, and written links the code contradicts, each with the command that works on it.
-    Gaps,
+    Gaps {
+        /// Cut the answer to about this many tokens (chars / 4); whole lines, first lines kept.
+        #[arg(long)]
+        budget: Option<usize>,
+    },
     /// A C4 diagram as Mermaid text, drawn from the arch items and their connections.
     C4 {
         /// `context` (default), `container` or `component`.
@@ -474,6 +505,9 @@ enum ArchCommand {
         level: C4Level,
         /// For `container`, the system (optional with one product); for `component`, the container.
         id: Option<String>,
+        /// Cut the answer to about this many tokens (chars / 4); whole lines, first lines kept.
+        #[arg(long)]
+        budget: Option<usize>,
     },
     /// Write one connection: the part it starts at, the part it reaches, and what it does.
     Connect {
@@ -788,7 +822,7 @@ fn open_repo(cli_root: Option<&std::path::Path>, start: &std::path::Path) -> any
 }
 
 fn run(cli: Cli) -> anyhow::Result<ExitCode> {
-    if let Command::Instructions { topic, write } = &cli.command {
+    if let Command::Instructions { topic, write, budget } = &cli.command {
         let start = match &cli.root {
             Some(root) => root.clone(),
             None => std::env::current_dir()?,
@@ -799,7 +833,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             return Ok(ExitCode::SUCCESS);
         }
         // The guide needs no store, so it prints even before `stone init`.
-        print!("{}", instructions(topic.as_deref(), &start)?);
+        print!("{}", lean::fit_lines(*budget, &instructions(topic.as_deref(), &start)?));
         return Ok(ExitCode::SUCCESS);
     }
     if let Command::CommitMsg { check: Some(file), .. } = &cli.command {
@@ -855,7 +889,10 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
                 return Ok(ExitCode::FAILURE);
             }
         }
-        Command::Get { id } => print!("{}", render_get(&repo.get(&id)?, cli.json)?),
+        Command::Get { id, budget } => {
+            let text = render_get(&repo.get(&id)?, cli.json)?;
+            print!("{}", lean::fit_lines(if cli.json { None } else { budget }, &text));
+        }
         Command::List(args) => {
             let filter = ListFilter {
                 item_type: args.item_type,
@@ -871,7 +908,8 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             if rows.is_empty() && !cli.json {
                 println!("no items match");
             } else {
-                print!("{}", render_rows(&rows, cli.json, type_known, status_known)?);
+                let text = render_rows(&rows, cli.json, type_known, status_known)?;
+                print!("{}", lean::fit_lines(if cli.json { None } else { args.budget }, &text));
             }
         }
         Command::Search(args) => {
@@ -952,6 +990,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
                     .collect(),
                 unset: args.unset,
                 section,
+                replace_nested: args.replace_nested,
                 check_ac: args.check_ac,
                 note: args.note,
             };
@@ -1113,10 +1152,16 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             let found = precedents::precedents(&repo, &lookup)?;
             print!("{}", render_precedents(&found, cli.json)?);
         }
-        Command::History { id, limit, no_diff } => {
+        Command::History {
+            id,
+            limit,
+            no_diff,
+            budget,
+        } => {
             let opts = HistoryOpts { limit, diff: !no_diff };
             let found = history::history(&repo, &id, &opts)?;
-            print!("{}", if cli.json { pretty(&found)? } else { found.text() });
+            let text = if cli.json { pretty(&found)? } else { found.text() };
+            print!("{}", lean::fit_lines(if cli.json { None } else { budget }, &text));
         }
         Command::Timeline {
             since,
@@ -1124,6 +1169,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             component,
             kinds,
             limit,
+            budget,
         } => {
             let today = Date::today();
             let opts = TimelineOpts {
@@ -1144,7 +1190,8 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             )?;
             let more = events.len() > shown;
             events.truncate(shown);
-            print!("{}", render_timeline(&events, more, cli.json)?);
+            let text = render_timeline(&events, more, cli.json)?;
+            print!("{}", lean::fit_lines(if cli.json { None } else { budget }, &text));
         }
         Command::Init { .. } | Command::Instructions { .. } => {}
     }
@@ -1500,19 +1547,31 @@ fn render_search(
 
 fn run_arch(repo: &Repo, command: &ArchCommand, json: bool) -> anyhow::Result<String> {
     Ok(match command {
-        ArchCommand::Hld => {
+        ArchCommand::Hld { budget } => {
             let hld = design::hld(repo)?;
-            if json { pretty(&hld)? } else { render_hld(&hld) }
+            if json {
+                pretty(&hld)?
+            } else {
+                lean::fit_lines(*budget, &render_hld(&hld))
+            }
         }
-        ArchCommand::Lld { container } => {
+        ArchCommand::Lld { container, budget } => {
             let lld = design::lld(repo, container)?;
-            if json { pretty(&lld)? } else { render_lld(&lld)? }
+            if json {
+                pretty(&lld)?
+            } else {
+                lean::fit_lines(*budget, &render_lld(&lld)?)
+            }
         }
-        ArchCommand::Gaps => {
+        ArchCommand::Gaps { budget } => {
             let found = carvestone_engine::arch_gaps::gaps(repo)?;
-            if json { pretty(&found)? } else { render_gaps(&found) }
+            if json {
+                pretty(&found)?
+            } else {
+                lean::fit_lines(*budget, &render_gaps(&found))
+            }
         }
-        ArchCommand::C4 { level, id } => {
+        ArchCommand::C4 { level, id, budget } => {
             let source = match (level, id.as_deref()) {
                 (C4Level::Context, None) => c4::c4_context(repo)?,
                 (C4Level::Context, Some(_)) => anyhow::bail!("`arch c4 context` takes no id; it draws every system"),
@@ -1525,7 +1584,7 @@ fn run_arch(repo: &Repo, command: &ArchCommand, json: bool) -> anyhow::Result<St
             if json {
                 pretty(&c4::C4Source { source })?
             } else {
-                source
+                lean::fit_lines(*budget, &source)
             }
         }
         ArchCommand::Connect { .. } => unreachable!("`arch connect` is handled before `run_arch`"),
@@ -1658,6 +1717,12 @@ fn code_tail(omitted: usize, note: Option<&str>) -> String {
     out
 }
 
+/// The lines an empty answer adds about what is indexed, each on its own line; nothing when the
+/// answer has hits.
+fn gap_lines(gap: Option<&str>) -> String {
+    gap.map_or_else(String::new, |gap| format!("{gap}\n"))
+}
+
 /// `uses` and `deps` as text. They fail on a target that matches nothing, so an empty answer
 /// means the symbol is there with no links: said so, not as "no matches".
 fn linked_or_none(
@@ -1668,8 +1733,9 @@ fn linked_or_none(
 ) -> anyhow::Result<String> {
     if result.hits.is_empty() && !json {
         return Ok(format!(
-            "{}\n{}",
+            "{}\n{}{}",
             none(&result.query),
+            gap_lines(result.gap.as_deref()),
             code_tail(0, result.note.as_deref())
         ));
     }
@@ -1683,7 +1749,12 @@ fn render_code(result: &CodeResult, json: bool, detail: Detail, budget: Option<u
     }
     let note = result.note.as_deref();
     if result.hits.is_empty() {
-        return Ok(format!("no matches for \"{}\"\n{}", result.query, code_tail(0, note)));
+        return Ok(format!(
+            "no matches for \"{}\"\n{}{}",
+            result.query,
+            gap_lines(result.gap.as_deref()),
+            code_tail(0, note)
+        ));
     }
     Ok(lean::fit(budget, result.hits.len(), |kept| {
         let mut out = lean::symbol_lines(&result.hits[..kept], detail, true, &mut HashSet::new());
@@ -1699,7 +1770,12 @@ fn render_outline(result: &Outline, json: bool, full: bool, budget: Option<usize
     }
     let note = result.note.as_deref();
     if result.entries.is_empty() {
-        return Ok(format!("{} declares nothing\n{}", result.path, code_tail(0, note)));
+        return Ok(format!(
+            "{} declares nothing\n{}{}",
+            result.path,
+            gap_lines(result.gap.as_deref()),
+            code_tail(0, note)
+        ));
     }
     Ok(lean::fit(budget, result.entries.len(), |kept| {
         let mut out = format!("{}\n", result.path);
@@ -1752,7 +1828,11 @@ fn render_impact(result: &Impact, json: bool, budget: Option<usize>) -> anyhow::
     }
     if result.dependents.is_empty() {
         let note = code_tail(result.omitted, result.note.as_deref());
-        return Ok(format!("nothing depends on {}\n{tail}{note}", result.query));
+        return Ok(format!(
+            "nothing depends on {}\n{}{tail}{note}",
+            result.query,
+            gap_lines(result.gap.as_deref())
+        ));
     }
     Ok(lean::fit(budget, result.dependents.len(), |kept| {
         let mut out = lean::symbol_lines(&result.dependents[..kept], Detail::Two, true, &mut HashSet::new());
@@ -1771,7 +1851,12 @@ fn render_path(result: &PathResult, json: bool, budget: Option<usize>) -> anyhow
     }
     if result.steps.is_empty() {
         let tail = code_tail(result.omitted, result.note.as_deref());
-        return Ok(format!("no path between {} and {}\n{tail}", result.from, result.to));
+        return Ok(format!(
+            "no path between {} and {}\n{}{tail}",
+            result.from,
+            result.to,
+            gap_lines(result.gap.as_deref())
+        ));
     }
     // The chain is walked in order, so its steps keep their order instead of grouping by file.
     let inferred = if result.exact { "" } else { "  inferred" };

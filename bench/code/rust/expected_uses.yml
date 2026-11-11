@@ -6,3 +6,5 @@
   sites: ["src/checkout.rs:5"]
 - symbol: order::Order
   sites: ["src/checkout.rs:1"]
+- symbol: order::LIMIT
+  sites: ["src/order.rs:17", "src/checkout.rs:1", "src/checkout.rs:10"]

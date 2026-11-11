@@ -9,4 +9,8 @@ dependents: Array<Hit>, components: Array<string>, tasks: Array<string>, docs: A
 /**
  * Dependents the limit or the budget left out.
  */
-omitted?: number, note?: string, };
+omitted?: number, note?: string, 
+/**
+ * Set only on an empty answer: what is indexed, what is not, and the grep command to run next.
+ */
+gap?: string, };

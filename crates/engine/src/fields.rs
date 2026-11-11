@@ -4,6 +4,7 @@ use carvestone_core::{IdScheme, ItemType, LIST_KEYS, SCALAR_KEYS, section_text, 
 use carvestone_store::{Config, Document};
 use serde_norway::Value;
 
+use crate::check_fields::is_date;
 use crate::check_links::RELATION_KEYS;
 use crate::create::today;
 use crate::repo::EngineError;
@@ -164,6 +165,11 @@ fn set_scalar(ctx: &SetCtx, doc: &mut Document, key: &str, raw: &str) -> Result<
         canonical_ref(ctx.snapshot, value)?
     } else {
         check_vocab(ctx.config, ctx.ty, key, value)?;
+        if matches!(key, "stale_after" | "created") && !is_date(value) {
+            return Err(EngineError::Invalid(format!(
+                "{key} `{value}` is not a date; use YYYY-MM-DD or a timestamp such as 2026-12-01T09:30:00+00:00, or remove it with --unset {key}"
+            )));
+        }
         value.to_string()
     };
     // The raw text, not the parsed value: `order: 2` set to `2` must not become `'2'`.

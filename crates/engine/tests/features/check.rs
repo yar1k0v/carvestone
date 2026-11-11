@@ -30,7 +30,7 @@ fn healthy() -> Store {
     );
     store.write(
         "stone/docs/setup.md",
-        "---\ntype: doc\ntitle: Setup\n---\n\n## Overview\n\nText.\n",
+        "---\ntype: doc\ntitle: Setup\nstale_after: 2999-01-01T00:00:00+00:00\n---\n\n## Overview\n\nText.\n",
     );
     store.write(
         "stone/plans/cutover.md",
@@ -106,12 +106,18 @@ fn problems() {
         "stone/docs/misfiled.md",
         "---\ntype: task\ntitle: Misfiled\nstatus: todo\n---\n",
     );
+    store.write(
+        "stone/docs/dated.md",
+        "---\ntype: doc\ntitle: Dated\nstale_after: soon\n---\n",
+    );
     store.write("crates/stray/lib.rs", "pub fn lost() {}\n");
+    store.write("crates/stray/logo.png", "x");
     store.git_track();
 
     let found: Vec<String> = store.repo().check().unwrap().iter().map(ToString::to_string).collect();
     let want = [
         "crates/stray/lib.rs:1: owner: no arch element owns this file; add it to the code globs of one component in stone/arch/",
+        "stone/docs/dated.md:4: date: stale_after `soon` is not a date; use YYYY-MM-DD",
         "stone/docs/misfiled.md:2: folder: a task belongs in stone/tasks/",
         "stone/tasks/CS-04.md:1: duplicate-id: same id as stone/tasks/CS-04.md, stone/tasks/CS-4.md; give one a new number (`stone renumber <path>`) or remove one",
         "stone/tasks/CS-04.md:1: file-name: name the file CS-4.md",

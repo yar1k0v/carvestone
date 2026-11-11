@@ -13,4 +13,8 @@ omitted?: number,
 /**
  * "code index is still building ..." while the fill is unfinished.
  */
-note?: string, };
+note?: string, 
+/**
+ * Set only on an empty answer: what is indexed, what is not, and the grep command to run next.
+ */
+gap?: string, };

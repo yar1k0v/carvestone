@@ -1,4 +1,4 @@
-//! Code ownership: each tracked file under `code_roots` belongs to one arch element.
+//! Code ownership: each tracked code file under `code_roots` belongs to one arch element.
 
 use std::collections::HashMap;
 
@@ -177,10 +177,9 @@ impl Repo {
             }
             return Ok(problems);
         };
-        // A whole-repo root holds READMEs and ignore files, which no component should own.
-        let whole_repo = root_prefixes(roots).iter().all(String::is_empty);
+        // A code root also holds art, config and docs, which no component should own.
         for file in files {
-            if whole_repo && lang_of(&file).is_none() {
+            if lang_of(&file).is_none() {
                 continue;
             }
             let owners: Vec<&str> = elements

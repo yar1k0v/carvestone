@@ -29,6 +29,28 @@ pub fn fit(budget: Option<usize>, count: usize, render: impl Fn(usize) -> String
     render(0)
 }
 
+/// Cuts printed text by whole lines so it costs about `budget` tokens: the first lines stay and one
+/// last line names how many lines and how many tokens were left out.
+pub fn fit_lines(budget: Option<usize>, text: &str) -> String {
+    if budget.is_none() {
+        return text.to_string();
+    }
+    let lines: Vec<&str> = text.lines().collect();
+    fit(budget, lines.len(), |kept| {
+        let mut out: String = lines[..kept].iter().map(|line| format!("{line}\n")).collect();
+        let dropped = &lines[kept..];
+        if !dropped.is_empty() {
+            let noun = if dropped.len() == 1 { "line" } else { "lines" };
+            out.push_str(&format!(
+                "{} more {noun} left out, about {} tokens; raise --budget\n",
+                dropped.len(),
+                tokens(&dropped.join("\n"))
+            ));
+        }
+        out
+    })
+}
+
 /// `tasks/CS-1` is `CS-1` everywhere an agent types it; other ids print as they are.
 pub fn short_id(id: &str) -> String {
     match id.split_once('/') {

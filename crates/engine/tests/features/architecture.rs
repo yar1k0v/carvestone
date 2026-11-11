@@ -396,6 +396,35 @@ fn drift_is_silent_while_the_design_and_the_code_agree_and_reports_each_differen
         );
         assert_eq!(found[0].problem.to_string(), warning, "{what}");
     }
+
+    // A name guess alone is not a dependency: it gives no drift warning, yet it stays an edge
+    // and still backs a `uses` entry.
+    let store = shop();
+    store.write(
+        "src/store.rs",
+        "pub struct Parser;\n\nimpl Parser {\n    pub fn parse(&self) -> u32 {\n        1\n    }\n}\n\npub fn save() -> u32 {\n    1\n}\n",
+    );
+    store.write(
+        "src/handlers.rs",
+        "pub fn ping(text: &str) -> u32 {\n    text.parse().unwrap_or(0)\n}\n",
+    );
+    store.git_track();
+
+    let found = arch_graph(&store.repo()).unwrap();
+    let guess = found
+        .code_edges
+        .iter()
+        .find(|e| e.from == "arch/shop/api/handlers" && e.to == "arch/shop/store")
+        .expect("a name-guess edge to the store");
+    assert_eq!(guess.summary(), "1 edge, first src/handlers.rs:2, inferred only");
+    assert!(found.drift.is_empty(), "{:?}", found.drift);
+
+    store.write(
+        "stone/arch/shop/api/handlers.md",
+        &HANDLERS.replace("code:", "uses: [arch/shop/store]\ncode:"),
+    );
+    let found = arch_graph(&store.repo()).unwrap();
+    assert!(found.drift.is_empty(), "{:?}", found.drift);
 }
 
 const FILES: &str = "---\ntype: component\ntitle: Files\nparent: arch/shop/store\n---\n";

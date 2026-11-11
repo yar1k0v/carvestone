@@ -212,7 +212,7 @@ fn ticking_a_criterion_changes_only_that_box() {
     let repo = store.repo();
 
     let tick = Edit {
-        check_ac: Some(2),
+        check_ac: vec![2],
         ..Edit::default()
     };
     repo.edit("CS-1", &tick, false).unwrap();
@@ -220,6 +220,26 @@ fn ticking_a_criterion_changes_only_that_box() {
         without(&store.read("stone/tasks/CS-1.md"), "generated:"),
         TASK.replace("- [ ] two", "- [x] two")
     );
+
+    store.write("stone/tasks/CS-2.md", TASK);
+    let both = Edit {
+        check_ac: vec![1, 2],
+        ..Edit::default()
+    };
+    repo.edit("CS-2", &both, false).unwrap();
+    assert_eq!(
+        without(&store.read("stone/tasks/CS-2.md"), "generated:"),
+        TASK.replace("- [ ] one", "- [x] one").replace("- [ ] two", "- [x] two")
+    );
+
+    store.write("stone/tasks/CS-3.md", TASK);
+    let first_and_last = Edit {
+        check_ac: vec![1, 3],
+        ..Edit::default()
+    };
+    let err = repo.edit("CS-3", &first_and_last, false).unwrap_err();
+    assert!(err.to_string().contains("no. 3 does not exist"), "{err}");
+    assert_eq!(store.read("stone/tasks/CS-3.md"), TASK);
 }
 
 #[test]

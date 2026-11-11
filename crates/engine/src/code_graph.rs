@@ -14,6 +14,7 @@ use serde::Serialize;
 
 use crate::code::{CodeQuery, Target, cut, effective_limit, exactness, is_zero, open, resolve_target, symbol_hit};
 use crate::code_entries::{EntryRow, component_rows, detect};
+use crate::code_gap;
 use crate::code_index::{building_note, contains};
 use crate::code_rank::{is_support_path, rank};
 use crate::modules::{Module, common_folder, stored as stored_modules};
@@ -48,6 +49,10 @@ pub struct Impact {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub note: Option<String>,
+    /// Set only on an empty answer: what is indexed, what is not, and the grep command to run next.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub gap: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -69,6 +74,10 @@ pub struct PathResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub note: Option<String>,
+    /// Set only on an empty answer: what is indexed, what is not, and the grep command to run next.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub gap: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -412,6 +421,12 @@ pub fn impact(repo: &Repo, q: &CodeQuery) -> Result<Impact, EngineError> {
     let (tasks, docs) = related(&snapshot, conn, &owners, &paths, &qnames)?;
 
     let (dependents, omitted) = cut(dependents.into_iter().map(|d| d.hit).collect(), q.limit, q.budget);
+    // Built before the target moves into the answer.
+    let gap = if dependents.is_empty() {
+        Some(code_gap::of_target(conn, &target)?)
+    } else {
+        None
+    };
     Ok(Impact {
         query: target.label,
         dependents,
@@ -421,6 +436,7 @@ pub fn impact(repo: &Repo, q: &CodeQuery) -> Result<Impact, EngineError> {
         truncated: omitted > 0,
         omitted,
         note: building_note(conn)?,
+        gap,
     })
 }
 
@@ -507,6 +523,7 @@ pub fn path(repo: &Repo, q: &CodeQuery) -> Result<PathResult, EngineError> {
     }
     let note = building_note(conn)?;
     let Some((direction, steps)) = walked else {
+        let gap = code_gap::of_targets(conn, &a, &b)?;
         return Ok(PathResult {
             from: a.label,
             to: b.label,
@@ -516,6 +533,7 @@ pub fn path(repo: &Repo, q: &CodeQuery) -> Result<PathResult, EngineError> {
             truncated: false,
             omitted: 0,
             note,
+            gap: Some(gap),
         });
     };
     let exact = steps.iter().all(|(_, via)| via.as_ref().is_none_or(|edge| edge.exact));
@@ -537,6 +555,7 @@ pub fn path(repo: &Repo, q: &CodeQuery) -> Result<PathResult, EngineError> {
         truncated: omitted > 0,
         omitted,
         note,
+        gap: None,
     })
 }
 

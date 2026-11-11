@@ -7,6 +7,10 @@ import type { SectionEdit } from "./SectionEdit";
  */
 export type PatchRequest = { set?: { [key in string]: FieldValue }, unset?: Array<string>, section?: SectionEdit, 
 /**
+ * Replace the section although it holds sub-sections the new text does not carry.
+ */
+replace_nested?: boolean, 
+/**
  * The 1-based checkbox of `## Acceptance criteria` to tick.
  */
 check_ac?: number, 

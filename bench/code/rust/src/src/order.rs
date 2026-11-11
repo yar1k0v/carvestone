@@ -10,3 +10,9 @@ impl Order {
 pub fn total() -> u32 {
     0
 }
+
+pub const LIMIT: u32 = 3;
+
+pub fn capped() -> u32 {
+    LIMIT
+}

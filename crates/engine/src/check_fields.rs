@@ -78,6 +78,16 @@ pub(crate) fn field_problems(config: &Config, snapshot: &Snapshot, out: &mut Vec
                 format!("created `{created}` is not a date; use YYYY-MM-DD"),
             ));
         }
+        if let Some(stale_after) = &fields.stale_after
+            && !is_date(stale_after)
+        {
+            out.push(Problem::new(
+                path,
+                line_of("stale_after"),
+                "date",
+                format!("stale_after `{stale_after}` is not a date; use YYYY-MM-DD"),
+            ));
+        }
         for key in ["generated", "verified"] {
             let line = line_of(key);
             match doc.get_stamps(key) {
@@ -237,7 +247,7 @@ pub(crate) fn uses_problems(snapshot: &Snapshot, out: &mut Vec<Problem>) {
 }
 
 /// `YYYY-MM-DD`, optionally followed by `T` and anything (a timestamp).
-fn is_date(text: &str) -> bool {
+pub(crate) fn is_date(text: &str) -> bool {
     let b = text.as_bytes();
     if b.len() < 10 || (b.len() > 10 && b[10] != b'T') {
         return false;

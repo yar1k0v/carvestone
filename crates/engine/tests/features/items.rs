@@ -154,6 +154,73 @@ fn the_section_body_edits_the_text_before_the_first_heading() {
 }
 
 #[test]
+fn a_section_edit_refuses_to_drop_nested_sections() {
+    // Top holds One (with Deep) and Two, so replacing any of them drops the headings below.
+    const NESTED: &str =
+        "---\ntype: doc\ntitle: Guide\n---\n\n# Top\n\nIntro.\n\n## One\n\nA.\n\n### Deep\n\nD.\n\n## Two\n\nB.\n";
+    let store = Store::new();
+    let repo = store.repo();
+    let rows: [(&str, &str, bool, Result<String, String>); 5] = [
+        (
+            "Top",
+            "New intro.",
+            false,
+            Err("section `Top` holds 3 sub-sections the new text does not carry (One, Deep, Two); edit each by name, or pass --replace-nested to replace them all".into()),
+        ),
+        (
+            "one",
+            "New A.",
+            false,
+            Err("section `One` holds 1 sub-section the new text does not carry (Deep); edit each by name, or pass --replace-nested to replace them all".into()),
+        ),
+        (
+            "One",
+            "New A.\n\n### deep\n\nNew D.",
+            false,
+            Ok(NESTED.replace("A.\n\n### Deep\n\nD.", "New A.\n\n### deep\n\nNew D.")),
+        ),
+        ("One", "New A.", true, Ok(NESTED.replace("A.\n\n### Deep\n\nD.\n", "New A.\n"))),
+        ("Two", "New B.", false, Ok(NESTED.replace("B.", "New B."))),
+    ];
+    for (name, text, replace_nested, want) in rows {
+        store.write("stone/docs/guide.md", NESTED);
+        let req = Edit {
+            section: Some((name.into(), text.into())),
+            replace_nested,
+            ..Edit::default()
+        };
+        match want {
+            Ok(want) => {
+                let written = repo
+                    .edit("docs/guide", &req, false)
+                    .unwrap_or_else(|e| panic!("{name}: {e}"));
+                assert!(written.changed, "{name}: the edit writes");
+                assert_eq!(unstamped(&store.read("stone/docs/guide.md")), want, "{name}: {text}");
+            }
+            Err(want) => {
+                let err = repo
+                    .edit("docs/guide", &req, false)
+                    .err()
+                    .unwrap_or_else(|| panic!("{name}: edit passed"));
+                assert_eq!(err.to_string(), want, "{name}: {text}");
+                assert_eq!(store.read("stone/docs/guide.md"), NESTED, "{name}: nothing was written");
+            }
+        }
+    }
+
+    // A dry run refuses the same edit and changes nothing.
+    store.write("stone/docs/guide.md", NESTED);
+    let dry = repo
+        .edit("docs/guide", &section("Top", "New intro."), true)
+        .unwrap_err();
+    assert_eq!(
+        dry.to_string(),
+        "section `Top` holds 3 sub-sections the new text does not carry (One, Deep, Two); edit each by name, or pass --replace-nested to replace them all"
+    );
+    assert_eq!(store.read("stone/docs/guide.md"), NESTED);
+}
+
+#[test]
 fn the_same_edit_twice_gives_no_diff() {
     let store = Store::new();
     store.write("stone/tasks/CS-1.md", TASK);
@@ -298,7 +365,7 @@ fn errors() {
     let store = Store::new();
     store.write("stone/tasks/CS-1.md", BARE);
     let repo = store.repo();
-    let cases: [(&str, EngineError, &str); 5] = [
+    let cases: [(&str, EngineError, &str); 15] = [
         (
             "bad type",
             repo.create(&new("bogus", "x", None), false).unwrap_err(),
@@ -324,12 +391,85 @@ fn errors() {
             repo.edit("CS-1", &set("status", "bogus"), false).unwrap_err(),
             "status `bogus` is not valid for a task",
         ),
+        (
+            "bad stale_after",
+            repo.edit("CS-1", &set("stale_after", "soon"), false).unwrap_err(),
+            "stale_after `soon` is not a date",
+        ),
+        (
+            "impossible stale_after day",
+            repo.edit("CS-1", &set("stale_after", "2026-13-45"), false).unwrap_err(),
+            "stale_after `2026-13-45` is not a date",
+        ),
+        (
+            "relative stale_after",
+            repo.edit("CS-1", &set("stale_after", "5d"), false).unwrap_err(),
+            "stale_after `5d` is not a date",
+        ),
+        (
+            "stale_after with a space before the time",
+            repo.edit("CS-1", &set("stale_after", "2026-12-01 09:30"), false)
+                .unwrap_err(),
+            "stale_after `2026-12-01 09:30` is not a date",
+        ),
+        (
+            "empty stale_after",
+            repo.edit("CS-1", &set("stale_after", ""), false).unwrap_err(),
+            "stale_after `` is not a date",
+        ),
+        (
+            "bad created",
+            repo.edit("CS-1", &set("created", "soon"), false).unwrap_err(),
+            "created `soon` is not a date",
+        ),
+        (
+            "empty created",
+            repo.edit("CS-1", &set("created", ""), false).unwrap_err(),
+            "created `` is not a date",
+        ),
+        (
+            "new item with bad stale_after",
+            repo.create(
+                &NewItem {
+                    set: vec![("stale_after".into(), "soon".into())],
+                    ..new("doc", "Dated", None)
+                },
+                false,
+            )
+            .unwrap_err(),
+            "stale_after `soon` is not a date",
+        ),
+        (
+            "new item with bad created",
+            repo.create(
+                &NewItem {
+                    set: vec![("created".into(), "soon".into())],
+                    ..new("doc", "Born", None)
+                },
+                false,
+            )
+            .unwrap_err(),
+            "created `soon` is not a date",
+        ),
+        (
+            "new item from markdown with bad stale_after",
+            repo.create(
+                &NewItem::from_markdown("doc", "---\ntitle: Filed\nstale_after: soon\n---\n\nText.\n", "filed")
+                    .unwrap(),
+                false,
+            )
+            .unwrap_err(),
+            "stale_after `soon` is not a date",
+        ),
     ];
     for (what, err, want) in cases {
         assert!(err.to_string().contains(want), "{what}: {err}");
     }
     assert_eq!(store.read("stone/tasks/CS-1.md"), BARE);
     assert!(!store.exists("stone/tasks/CS-2.md"));
+    assert!(!store.exists("stone/docs/dated.md"));
+    assert!(!store.exists("stone/docs/born.md"));
+    assert!(!store.exists("stone/docs/filed.md"));
 }
 
 #[test]
@@ -346,6 +486,12 @@ fn from_markdown_keeps_stale_after_and_names_what_it_left_out() {
             ],
         ),
         ("title only", "---\ntitle: Plain\n---\n\nText.\n", None, vec![]),
+        (
+            "timestamp",
+            "---\ntitle: Stamped\nstale_after: 2026-01-01T09:30:00+00:00\n---\n\nText.\n",
+            Some("stale_after: 2026-01-01T09:30:00+00:00"),
+            vec![],
+        ),
         (
             "list stale_after",
             "---\ntitle: Listed date\nstale_after: [2026-01-01]\n---\n\nText.\n",

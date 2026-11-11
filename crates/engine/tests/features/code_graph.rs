@@ -1,7 +1,7 @@
 //! Code graph: find, uses, impact, path and outline over small projects written inline.
 
 use carvestone_engine::EngineError;
-use carvestone_engine::code::{CodeQuery, OutlineEntry, find, outline, uses};
+use carvestone_engine::code::{CodeQuery, OutlineEntry, deps, find, outline, uses};
 use carvestone_engine::code_graph::{impact, path};
 use carvestone_engine::code_native::{NativeQuery, native};
 use carvestone_engine::search::{Hit, SearchQuery, search};
@@ -573,6 +573,65 @@ fn find_says_when_no_code_roots_are_set() {
             "no code is indexed, because stone/config.yml has no code_roots; add code_roots: [.] to index the whole repo"
         )
     );
+}
+
+#[test]
+fn an_empty_answer_says_what_is_not_indexed() {
+    let store = rust_project();
+    let repo = store.repo();
+    let between = |from: &str, to: &str| {
+        path(
+            &repo,
+            &CodeQuery {
+                to: Some(to.into()),
+                ..query(from)
+            },
+        )
+        .unwrap()
+    };
+    // (command, gap, first line, last line)
+    let rows = [
+        (
+            "uses",
+            uses(&repo, &query("total")).unwrap().gap,
+            "indexed for rust: declarations",
+            "next: git grep -n -F -e \"total\"",
+        ),
+        (
+            "deps",
+            deps(&repo, &query("total")).unwrap().gap,
+            "indexed for rust: declarations",
+            "next: git grep -n -F -e \"total\"",
+        ),
+        (
+            "impact",
+            impact(&repo, &query("total")).unwrap().gap,
+            "indexed for rust: declarations",
+            "next: git grep -n -F -e \"total\"",
+        ),
+        (
+            "path",
+            between("total", "helper").gap,
+            "indexed for rust: declarations",
+            "next: git grep -n -F -e \"total\" -e \"helper\"",
+        ),
+        (
+            "find",
+            find(&repo, &query("zzz")).unwrap().gap,
+            "indexed here: declarations of rust",
+            "next: git grep -n -F -e \"zzz\"",
+        ),
+    ];
+    for (command, gap, first, last) in rows {
+        let gap = gap.unwrap_or_else(|| panic!("{command} has no gap"));
+        let lines: Vec<&str> = gap.lines().collect();
+        assert_eq!(lines.len(), 3, "{command}: {gap}");
+        assert!(lines[0].starts_with(first), "{command}: {}", lines[0]);
+        assert_eq!(lines[1], "not indexed: string literals, config keys", "{command}");
+        assert_eq!(lines[2], last, "{command}: {gap}");
+    }
+    // A filled answer says nothing about its gap: the query text already answered it.
+    assert_eq!(uses(&repo, &query("helper")).unwrap().gap, None);
 }
 
 #[test]

@@ -336,7 +336,8 @@ pub fn arch_graph(repo: &Repo) -> Result<ArchGraph, EngineError> {
     })
 }
 
-/// `arch-drift` warnings: code dependencies `uses` does not list, and `uses` entries no code edge backs.
+/// `arch-drift` warnings: code dependencies with at least one exact edge `uses` does not list,
+/// and `uses` entries no code edge backs.
 /// Skipped when the code index holds no files.
 pub(crate) fn drift_problems(
     root: &Path,
@@ -410,7 +411,8 @@ fn drift_of(
             .map(|value| target_id(snapshot, value))
             .collect();
         let line = doc.key_line("uses").or_else(|| doc.key_line("code")).unwrap_or(1);
-        for edge in graph.edges.iter().filter(|e| e.from == id) {
+        // A name guess alone is not evidence of a dependency.
+        for edge in graph.edges.iter().filter(|e| e.from == id && !e.inferred_only) {
             if !uses.contains(&edge.to) && !declared.contains(&(edge.from.clone(), edge.to.clone())) {
                 out.push(DriftFinding {
                     problem: Problem::warning(
