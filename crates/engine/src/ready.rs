@@ -20,10 +20,10 @@ pub struct Ready {
 }
 
 /// A code span of the plan: its file line, its text without backticks, and whether `(new)` follows it.
-struct Span {
-    line: usize,
-    text: String,
-    marked: bool,
+pub(crate) struct Span {
+    pub(crate) line: usize,
+    pub(crate) text: String,
+    pub(crate) marked: bool,
 }
 
 /// True for a line that opens a numbered step: digits, a dot and a space.
@@ -33,8 +33,38 @@ fn numbered(text: &str) -> bool {
     digits > 0 && text[digits..].starts_with(". ")
 }
 
-fn path_of(target: &str) -> &str {
+pub(crate) fn path_of(target: &str) -> &str {
     target.split('#').next().unwrap_or("").trim()
+}
+
+/// The lines of the task's Plan section outside fences, with their file lines.
+pub(crate) fn plan_lines(item: &carvestone_core::Item) -> Vec<(usize, &str)> {
+    let secs = sections(&item.body, item.body_line);
+    secs.iter()
+        .find(|s| s.title.eq_ignore_ascii_case("Plan"))
+        .map(|plan| {
+            lines(&item.body, item.body_line)
+                .into_iter()
+                .filter(|(line, _, fenced)| !fenced && *line > plan.start_line && *line <= plan.end_line)
+                .map(|(line, text, _)| (line, text))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Every code span of the plan lines, in plan order.
+pub(crate) fn plan_spans(plan_lines: &[(usize, &str)]) -> Vec<Span> {
+    let mut spans = Vec::new();
+    for (line, text) in plan_lines {
+        for (start, end) in code_span_ranges(text) {
+            spans.push(Span {
+                line: *line,
+                text: text[start..end].trim_matches('`').trim().to_string(),
+                marked: text[end..].trim_start().starts_with("(new)"),
+            });
+        }
+    }
+    spans
 }
 
 /// Every gap of the task, in the order a Lead fixes them. A file or symbol the plan adds is written
@@ -55,25 +85,8 @@ pub(crate) fn gaps(repo: &Repo, id: &str, item: &carvestone_core::Item) -> Resul
     let secs = sections(&item.body, item.body_line);
     let section = |name: &str| secs.iter().find(|s| s.title.eq_ignore_ascii_case(name));
 
-    let plan_lines: Vec<(usize, &str)> = section("Plan")
-        .map(|plan| {
-            lines(&item.body, item.body_line)
-                .into_iter()
-                .filter(|(line, _, fenced)| !fenced && *line > plan.start_line && *line <= plan.end_line)
-                .map(|(line, text, _)| (line, text))
-                .collect()
-        })
-        .unwrap_or_default();
-    let mut spans = Vec::new();
-    for (line, text) in &plan_lines {
-        for (start, end) in code_span_ranges(text) {
-            spans.push(Span {
-                line: *line,
-                text: text[start..end].trim_matches('`').trim().to_string(),
-                marked: text[end..].trim_start().starts_with("(new)"),
-            });
-        }
-    }
+    let plan_lines = plan_lines(item);
+    let spans = plan_spans(&plan_lines);
     let marked: HashSet<&str> = spans.iter().filter(|s| s.marked).map(|s| s.text.as_str()).collect();
 
     let root = &repo.store.layout.root;

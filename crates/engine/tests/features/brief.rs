@@ -106,6 +106,44 @@ fn a_brief_holds_the_task_whole_and_its_links_by_tier() {
 }
 
 #[test]
+fn a_brief_lists_the_plan_targets_with_their_lines() {
+    const PLANNED: &str = "---\ntype: task\ntitle: Ship\nstatus: todo\npaths: [src/util.rs]\n---\n\n## Acceptance criteria\n\n- [ ] `cargo test` → 0 failed\n\n## Plan\n\n1. Change `src/util.rs#helper`.\n2. Add `src/new.rs#fresh` (new).\n3. Fix `src/util.rs#gone`.\n4. Call `src/util.rs#helper` again.\n5. Use `src/two.rs#B::new`.\n6. Use `src/two.rs#new`.\n7. Read `README.md#usage`.\n";
+    let store = Store::new();
+    store.write("stone/config.yml", "project: t\ntask_prefix: CS\ncode_roots: [src/]\n");
+    store.write("Cargo.toml", "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n");
+    store.write("src/util.rs", "pub fn helper() -> u32 {\n    1\n}\n");
+    store.write(
+        "src/two.rs",
+        "pub struct A;\npub struct B;\nimpl A {\n    pub fn new() -> A {\n        A\n    }\n}\nimpl B {\n    pub fn new() -> B {\n        B\n    }\n}\n",
+    );
+    store.write("README.md", "# Demo\n\nUsage notes.\n");
+    store.write("stone/tasks/CS-1.md", PLANNED);
+    let repo = store.repo();
+
+    let found = brief(&repo, "CS-1").unwrap();
+    assert_eq!(found.parts[0].name, "task");
+    let targets = &found.parts[1];
+    assert_eq!(targets.name, "plan targets");
+    assert_eq!(targets.tier, Tier::Critical);
+    assert_eq!(
+        targets.lines,
+        [
+            "src/util.rs#helper  L1-3",
+            "src/new.rs#fresh  (new)",
+            "src/util.rs#gone  not found",
+            "src/two.rs#B::new  L9-11",
+            "src/two.rs#new  ambiguous, 2 matches: L4-6, L9-11"
+        ]
+    );
+
+    // The part is never cut, however small the budget.
+    let cut = fit(&found.parts, Some(60));
+    for line in &targets.lines {
+        assert!(cut.text.contains(line.as_str()), "{line}");
+    }
+}
+
+#[test]
 fn a_brief_refuses_what_is_not_a_task() {
     let store = store();
     let repo = store.repo();

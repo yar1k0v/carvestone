@@ -3,17 +3,19 @@
 //! The engine builds the parts; the adapters cut them with [`crate::tiers::fit`]. The task and
 //! its links are critical, everything else shrinks to fit.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use carvestone_core::{Section, section_text, sections};
 use carvestone_store::Entry;
 use serde::Serialize;
 
 use crate::arch_graph::is_arch;
-use crate::code::{CodeQuery, outline};
+use crate::code::{CodeQuery, OutlineEntry, outline};
 use crate::code_entries::entries;
+use crate::design::span_target;
 use crate::links::{LinkContext, links_of};
 use crate::precedents::{Lookup, is_task, precedents};
+use crate::ready::{path_of, plan_lines, plan_spans};
 use crate::repo::{EngineError, Repo};
 use crate::resolve::Snapshot;
 use crate::tiers::{Part, tokens};
@@ -53,6 +55,7 @@ pub fn brief(repo: &Repo, task: &str) -> Result<Brief, EngineError> {
     let label = snapshot.label(entry);
 
     let mut parts = vec![Part::critical("task", task_lines(&label, entry))];
+    parts.extend(targets_part(repo, item));
     let linked = linked_items(repo, &snapshot, entry);
     if !linked.is_empty() {
         let lines = linked
@@ -159,6 +162,76 @@ fn task_lines(label: &str, entry: &Entry) -> Vec<String> {
         lines.push(format!("Depends on: {}", item.fields.depends_on.join(", ")));
     }
     lines
+}
+
+/// The code targets of the plan, read as the ready check reads them.
+fn targets_part(repo: &Repo, item: &carvestone_core::Item) -> Option<Part> {
+    let spans = plan_spans(&plan_lines(item));
+    let marked: HashSet<&str> = spans.iter().filter(|s| s.marked).map(|s| s.text.as_str()).collect();
+    let mut seen = HashSet::new();
+    // One outline per file; `None` is a file whose outline failed.
+    let mut outlines: HashMap<String, Option<Vec<OutlineEntry>>> = HashMap::new();
+    let mut lines = Vec::new();
+    for target in spans.iter().filter_map(|s| span_target(&s.text)) {
+        if !seen.insert(target.clone()) {
+            continue;
+        }
+        if marked.contains(target.as_str()) || marked.contains(path_of(&target)) {
+            lines.push(format!("{target}  (new)"));
+            continue;
+        }
+        let path = path_of(&target).to_string();
+        let found = outlines.entry(path.clone()).or_insert_with(|| {
+            let query = CodeQuery {
+                target: path.clone(),
+                ..CodeQuery::default()
+            };
+            outline(repo, &query).ok().map(|found| found.entries)
+        });
+        let Some(entries) = found else {
+            // A file on disk that the code graph does not hold (a doc, a manifest) is not judged,
+            // as the ready check does not judge it.
+            if !repo.store.layout.root.join(&path).is_file() {
+                lines.push(format!("{target}  not found"));
+            }
+            continue;
+        };
+        let symbol = target.split_once('#').map_or("", |(_, symbol)| symbol);
+        // A bare name must not pick the first of several entries; a `Type::method` target is
+        // compared with the qualified name, which holds the type with the method.
+        let mut matches: Vec<&OutlineEntry> = if symbol.contains("::") {
+            let tail = format!("::{symbol}");
+            entries
+                .iter()
+                .filter(|entry| entry.qname == symbol || entry.qname.ends_with(&tail))
+                .collect()
+        } else {
+            entries.iter().filter(|entry| entry.name == symbol).collect()
+        };
+        matches.sort_by_key(|entry| entry.lines[0]);
+        lines.push(match matches.as_slice() {
+            [] => format!("{target}  not found"),
+            [only] => format!("{target}  {}", range(only)),
+            many => {
+                let ranges: Vec<String> = many.iter().map(|entry| range(entry)).collect();
+                format!("{target}  ambiguous, {} matches: {}", many.len(), ranges.join(", "))
+            }
+        });
+    }
+    if lines.is_empty() {
+        return None;
+    }
+    let mut part = Part::critical("plan targets", lines);
+    part.heading = Some("Plan targets:".to_string());
+    Some(part)
+}
+
+fn range(entry: &OutlineEntry) -> String {
+    if entry.lines[0] == entry.lines[1] {
+        format!("L{}", entry.lines[0])
+    } else {
+        format!("L{}-{}", entry.lines[0], entry.lines[1])
+    }
 }
 
 fn text_lines(text: &str) -> Vec<String> {
