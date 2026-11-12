@@ -20,6 +20,7 @@ okf_version: "0.2"
 - [Docs](docs/feature-docs.md) - Project docs as markdown files, linked to code and served as a site.
 - [Planner](docs/feature-planner.md) - Tasks, a board, milestones, plans and decisions, kept as markdown files in git.
 - [Carvestone](docs/product-overview.md) - What Stone is, who it is for, and what joins its parts.
+- [Product strategy](docs/product-strategy.md) - What Stone works on next and why: five bets, the gap checklist with links, and the order of work.
 
 # Architecture
 
