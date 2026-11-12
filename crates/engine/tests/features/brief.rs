@@ -6,13 +6,14 @@ use carvestone_engine::tiers::{Part, Tier, fit};
 
 use crate::support::Store;
 
-const TASK: &str = "---\ntype: task\ntitle: Ship\nstatus: todo\nlinks: [ADR-1]\ncomponents: [arch/api]\npaths: [src/a.rs]\n---\n\n## Description\n\nDo the thing, see [[docs/guide#setup]].\n\n## Acceptance criteria\n\n- [ ] first criterion\n- [ ] second criterion\n\n## Plan\n\n1. first step\n2. second step\n";
+const TASK: &str = "---\ntype: task\ntitle: Ship\nstatus: todo\nlinks: [ADR-1]\ncomponents: [arch/api]\npaths: [src/a.rs, docs/notes.md]\n---\n\n## Description\n\nDo the thing, see [[docs/guide#setup]].\n\n## Acceptance criteria\n\n- [ ] first criterion\n- [ ] second criterion\n\n## Plan\n\n1. first step\n2. second step\n";
 const BARE: &str = "---\ntype: task\ntitle: Bare\nstatus: todo\n---\n\n## Description\n\nJust text.\n\n## Acceptance criteria\n\n- [ ] only criterion\n";
 
 fn store() -> Store {
     let store = Store::new();
     store.write("stone/tasks/CS-1.md", TASK);
     store.write("stone/tasks/CS-2.md", BARE);
+    store.write("docs/notes.md", "# Notes\n\nPlain text.\n");
     store.write(
         "stone/decisions/ADR-1.md",
         "---\ntype: decision\ntitle: Pick\nstatus: accepted\n---\n\n## Context\n\nWhy we looked.\n\n## Decision\n\nPick the cheap one.\n",
@@ -71,7 +72,7 @@ fn a_brief_holds_the_task_whole_and_its_links_by_tier() {
     for text in ["first criterion", "second criterion", "first step", "second step"] {
         assert!(has(text), "{text}");
     }
-    assert!(task.lines.iter().any(|line| line == "Paths: src/a.rs"));
+    assert!(task.lines.iter().any(|line| line == "Paths: src/a.rs, docs/notes.md"));
     assert!(task.lines[0].starts_with("CS-1  Ship  todo"));
 
     // Links print in file order: relation fields first, then the body.

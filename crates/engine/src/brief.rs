@@ -10,8 +10,8 @@ use carvestone_store::Entry;
 use serde::Serialize;
 
 use crate::arch_graph::is_arch;
-use crate::code::{CodeQuery, OutlineEntry, outline};
-use crate::code_entries::entries;
+use crate::code::{CodeQuery, OutlineEntry, open, outline};
+use crate::code_entries::{EntryState, entries, entry_state};
 use crate::design::span_target;
 use crate::links::{LinkContext, links_of};
 use crate::precedents::{Lookup, is_task, precedents};
@@ -93,8 +93,16 @@ pub fn brief(repo: &Repo, task: &str) -> Result<Brief, EngineError> {
             .collect();
         parts.push(Part::optional("entry points", Some("Entry points:"), lines));
     }
+    let index = (!item.fields.paths.is_empty()).then(|| open(repo).ok()).flatten();
     for path in &item.fields.paths {
-        parts.push(outline_part(repo, path));
+        // A file that exists but is not code has nothing to outline.
+        let not_code = repo.store.layout.root.join(path).is_file()
+            && index
+                .as_ref()
+                .is_some_and(|index| matches!(entry_state(index.conn(), path), Ok(EntryState::NoFile)));
+        if !not_code {
+            parts.push(outline_part(repo, path));
+        }
     }
     if let Some(part) = precedents_part(repo, &label) {
         parts.push(part);

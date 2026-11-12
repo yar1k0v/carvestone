@@ -353,6 +353,8 @@ fn the_project_map_lists_parts_review_ready_and_progress() {
         "---\ntype: container\ntitle: App\ncode: ['src/**']\n---\n",
     );
     store.write("src/main.rs", "fn main() {}\n");
+    store.write("Cargo.toml", "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n");
+    store.write("src/lib.rs", "pub fn ship() {}\n");
     store.write(
         "stone/milestones/M-1.md",
         "---\ntype: milestone\ntitle: First\nstatus: planned\n---\n",
@@ -386,7 +388,7 @@ fn the_project_map_lists_parts_review_ready_and_progress() {
     assert_eq!(milestone, (1, 5));
     assert_eq!(map.components.len(), 1);
     assert_eq!(map.components[0].code, ["src/**"]);
-    assert_eq!(map.components[0].entries, ["src/main.rs#main"]);
+    assert_eq!(map.components[0].entries, ["src/lib.rs", "src/main.rs#main"]);
 
     store.git_commit("feat: app", "2026-10-01T09:00:00+00:00");
     store.write("src/main.rs", "fn main() { }\n");

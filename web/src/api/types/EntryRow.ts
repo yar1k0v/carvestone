@@ -9,7 +9,7 @@ export type EntryRow = {
  */
 target: string, 
 /**
- * `main`, `program`, `package` or `server` for a detected entry;
+ * `main`, `program`, `package`, `server` or `library` for a detected entry;
  * `declared` for a declared one the detectors do not see; `gone` for a declared one the code
  * graph no longer holds.
  */

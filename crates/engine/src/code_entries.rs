@@ -1,7 +1,7 @@
 //! `stone code entries`: where execution of a component starts. Entries come from two places: the
 //! `entry` list an arch item declares, and detection over the code graph (a Rust `fn main`, a C#
 //! `Main`, top-level statements, a `package.json` `bin` or `main`, a file that starts a server, a
-//! Python `__main__` guard). Detection reads the index, and the few source lines the graph does
+//! Python `__main__` guard, a Rust library's `src/lib.rs`). Detection reads the index, and the few source lines the graph does
 //! not keep (the Python guard, a top-level server call).
 
 use std::collections::{BTreeSet, HashMap};
@@ -23,6 +23,8 @@ use crate::tiers;
 /// A sentinel for a declared entry the code graph no longer holds.
 const GONE: &str = "gone";
 const DECLARED: &str = "declared";
+/// The kind of a Rust library crate root.
+pub(crate) const LIBRARY: &str = "library";
 const SERVER_CALLS: [&str; 2] = ["listen", "createServer"];
 /// Folders a published `package.json` path usually points into instead of the sources.
 const BUILD_DIRS: [&str; 4] = ["dist", "build", "lib", "out"];
@@ -35,7 +37,7 @@ const FILE_LEVEL: &str = "(s.id IS NULL OR s.kind IN ('file', 'module'))";
 pub struct EntryRow {
     /// `path#Symbol` or `path`: the text an `entry` list holds.
     pub target: String,
-    /// `main`, `program`, `package` or `server` for a detected entry;
+    /// `main`, `program`, `package`, `server` or `library` for a detected entry;
     /// `declared` for a declared one the detectors do not see; `gone` for a declared one the code
     /// graph no longer holds.
     pub kind: String,
@@ -155,6 +157,7 @@ pub(crate) fn detect(conn: &Connection, root: &Path, keep: &dyn Fn(&str) -> bool
     let mut sources = Sources::new(root);
     let mut out = Vec::new();
     rust_mains(conn, keep, &mut out)?;
+    rust_libs(conn, root, keep, &mut out)?;
     csharp(conn, keep, &mut out)?;
     javascript(conn, keep, &mut sources, &mut out)?;
     package_json(conn, root, keep, &mut out)?;
@@ -189,6 +192,33 @@ fn rust_mains(conn: &Connection, keep: &dyn Fn(&str) -> bool, out: &mut Vec<Foun
                 line,
                 kind: "main",
                 detail: "fn main".into(),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// The root file of a library crate: a `src/lib.rs` with a `Cargo.toml` in the folder above `src/`.
+fn rust_libs(
+    conn: &Connection,
+    root: &Path,
+    keep: &dyn Fn(&str) -> bool,
+    out: &mut Vec<Found>,
+) -> Result<(), EngineError> {
+    let libs = rows(
+        conn,
+        "SELECT path FROM files WHERE lang = 'rust' AND (path = 'src/lib.rs' OR path LIKE '%/src/lib.rs')",
+        |row| row.get::<_, String>(0),
+    )?;
+    for path in libs {
+        let folder = path.strip_suffix("src/lib.rs").unwrap_or("").trim_end_matches('/');
+        if keep(&path) && root.join(folder).join("Cargo.toml").is_file() {
+            out.push(Found {
+                path,
+                symbol: None,
+                line: 1,
+                kind: LIBRARY,
+                detail: String::new(),
             });
         }
     }

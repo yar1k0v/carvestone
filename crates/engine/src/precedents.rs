@@ -16,7 +16,7 @@ use carvestone_store::Entry;
 use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
 
-use crate::code_entries::detect;
+use crate::code_entries::{LIBRARY, detect};
 use crate::git_cache::index_with_history;
 use crate::owner::{Element, arch_elements};
 use crate::repo::{EngineError, Repo};
@@ -505,7 +505,10 @@ impl<'a> Roles<'a> {
         let mut entries = HashSet::new();
         if let Some(conn) = conn {
             for found in detect(conn, &repo.store.layout.root, &|path| paths.contains(path))? {
-                entries.insert(found.path);
+                // A library root only declares modules; it starts nothing.
+                if found.kind != LIBRARY {
+                    entries.insert(found.path);
+                }
             }
         }
         Ok(Roles {
