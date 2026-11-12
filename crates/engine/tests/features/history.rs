@@ -190,7 +190,35 @@ fn precedents_find_finished_tasks_that_made_the_same_change() {
     let repo = store.repo();
 
     // CS-3 added one file with a function to the api. CS-1 and CS-2 did the same there; CS-4 added
-    // such a file to the other container; CS-5 is not finished, so it never shows.
+    // such a file to the other container; CS-5 is not finished, so it never shows. CS-6 changed
+    // over 100 files, so it never shows; CS-7 changed exactly 100, so it stays.
+    for (id, title, prefix, count, message, date) in [
+        (
+            "CS-6",
+            "Bulk import",
+            "import",
+            101,
+            "feat: bulk import\n\nRefs: CS-6",
+            "2026-04-10T09:00:00+00:00",
+        ),
+        (
+            "CS-7",
+            "Bulk export",
+            "export",
+            100,
+            "feat: bulk export\n\nRefs: CS-7",
+            "2026-04-12T09:00:00+00:00",
+        ),
+    ] {
+        for n in 0..count {
+            store.write(&format!("src/{prefix}_{n:03}.rs"), "pub fn f() -> u32 {\n    0\n}\n");
+        }
+        store.write(
+            &format!("stone/tasks/{id}.md"),
+            &task(title, "done", "arch/shop/api", ""),
+        );
+        store.git_commit(message, date);
+    }
     let found = precedents(
         &repo,
         &Lookup {
@@ -221,6 +249,21 @@ fn precedents_find_finished_tasks_that_made_the_same_change() {
                     matched: in_api.map(String::from).to_vec(),
                     files: vec!["src/orders.rs".into()],
                     more_files: 0,
+                },
+                Precedent {
+                    id: "CS-7".into(),
+                    title: Some("Bulk export".into()),
+                    score: 3,
+                    matched: vec!["added function".into(), "folder src".into()],
+                    files: [
+                        "src/export_000.rs",
+                        "src/export_001.rs",
+                        "src/export_002.rs",
+                        "src/export_003.rs"
+                    ]
+                    .map(String::from)
+                    .to_vec(),
+                    more_files: 96,
                 },
                 Precedent {
                     id: "CS-4".into(),

@@ -31,6 +31,9 @@ const FILES_SHOWN: usize = 4;
 const SIGNALS_SHOWN: usize = 4;
 /// Commits naming more tasks than this say nothing about one task's shape.
 const MAX_TASKS_PER_COMMIT: u32 = 3;
+/// A task that changed more files than this (a release, a bulk import) says nothing about the
+/// shape of a normal change.
+const MAX_PRECEDENT_FILES: usize = 100;
 const COMPONENT_POINTS: u32 = 3;
 const SHAPE_POINTS: u32 = 2;
 const FOLDER_POINTS: u32 = 1;
@@ -138,7 +141,8 @@ impl Precedents {
     }
 }
 
-/// The finished tasks most like the lookup, best first.
+/// The finished tasks most like the lookup, best first. Finished tasks that changed more than
+/// `MAX_PRECEDENT_FILES` files are left out.
 pub fn precedents(repo: &Repo, lookup: &Lookup) -> Result<Precedents, EngineError> {
     if lookup.task.is_none() && lookup.component.is_none() && lookup.role.is_none() {
         return Err(EngineError::Invalid(
@@ -176,6 +180,9 @@ pub fn precedents(repo: &Repo, lookup: &Lookup) -> Result<Precedents, EngineErro
             Some(conn) => commit_files(conn, entry)?,
             None => Vec::new(),
         };
+        if files.len() > MAX_PRECEDENT_FILES {
+            continue;
+        }
         finished.push((entry, files));
     }
 
