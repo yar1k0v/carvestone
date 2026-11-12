@@ -33,7 +33,7 @@ tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 futures-util = { version = "0.3", default-features = false }
 notify = "8"
-rust-embed = { version = "8", features = ["mime-guess"] }
+rust-embed = { version = "8", features = ["mime-guess", "compression"] }
 ts-rs = { version = "12", features = ["serde-json-impl"] }
 rmcp = { version = "=3.7.0", default-features = false, features = ["server", "transport-io"] }
 schemars = { version = "1", features = ["derive"] }
