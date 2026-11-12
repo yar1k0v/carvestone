@@ -61,6 +61,18 @@ pub struct LeftOut {
     pub tokens: usize,
 }
 
+impl LeftOut {
+    /// What `left` lost plus the `more` lines cut after it, named `name`. Each part is counted on
+    /// its own and the counts are added.
+    pub fn with_more(left: Option<&LeftOut>, name: &str, more: &[String]) -> LeftOut {
+        LeftOut {
+            name: name.to_string(),
+            lines: left.map_or(0, |l| l.lines) + more.len(),
+            tokens: left.map_or(0, |l| l.tokens) + tokens(&more.join("\n")),
+        }
+    }
+}
+
 /// The size of `dropped`, the printed lines an answer left out; `None` when nothing was dropped.
 pub fn left_out(name: &str, dropped: &[String]) -> Option<LeftOut> {
     (!dropped.is_empty()).then(|| LeftOut {

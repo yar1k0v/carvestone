@@ -121,12 +121,12 @@ impl Why {
 
     /// Tokens the printed lines cost an agent (characters divided by four).
     pub fn cost(&self) -> usize {
-        self.lines().iter().map(|l| l.chars().count().div_ceil(4)).sum()
+        self.lines().iter().map(|l| tiers::tokens(l)).sum()
     }
 
     /// Drops the least useful entries until the cost fits `budget`.
     fn fit(&mut self, budget: usize) {
-        // The printed lines of the dropped entries, the last one dropped first.
+        // The printed lines of the dropped entries.
         let mut dropped: Vec<String> = Vec::new();
         while self.cost() > budget {
             let line = self
@@ -140,7 +140,7 @@ impl Why {
             let Some(line) = line else {
                 break;
             };
-            dropped.insert(0, format!("  {line}"));
+            dropped.push(format!("  {line}"));
             self.truncated = true;
             self.omitted += 1;
             self.left_out = tiers::left_out("entries", &dropped);

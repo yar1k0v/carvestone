@@ -69,7 +69,7 @@ impl Hit {
 
     /// Tokens the printed line costs an agent.
     pub fn cost(&self) -> usize {
-        self.line().chars().count().div_ceil(4)
+        tiers::tokens(&self.line())
     }
 }
 
@@ -177,28 +177,18 @@ pub fn search(repo: &Repo, q: &SearchQuery) -> Result<SearchResult, EngineError>
     let mut hits = Vec::new();
     let mut dropped: Vec<String> = Vec::new();
     let mut spent = 0;
-    let mut stopped = false;
     // Snippets come from the candidate rows, so a hit past the limit costs no query.
-    for item in ordered {
-        let hit = match item {
-            Found::Symbol(hit) => hit,
-            Found::Section(c) => {
-                let mut hit = c.hit;
-                hit.snippet = snippet(&c.title, &c.text);
-                hit
-            }
-        };
+    let mut rest = ordered.into_iter().map(built);
+    for hit in rest.by_ref() {
         let cost = hit.cost();
-        if !stopped && (hits.len() == limit || q.budget.is_some_and(|b| !hits.is_empty() && spent + cost > b)) {
-            stopped = true;
-        }
-        if stopped {
+        if hits.len() == limit || q.budget.is_some_and(|b| !hits.is_empty() && spent + cost > b) {
             dropped.push(hit.line());
-            continue;
+            break;
         }
         spent += cost;
         hits.push(hit);
     }
+    dropped.extend(rest.map(|hit| hit.line()));
     let omitted = total - hits.len();
     Ok(SearchResult {
         query: q.text.clone(),
@@ -213,6 +203,17 @@ pub fn search(repo: &Repo, q: &SearchQuery) -> Result<SearchResult, EngineError>
 enum Found {
     Section(Candidate),
     Symbol(Hit),
+}
+
+fn built(item: Found) -> Hit {
+    match item {
+        Found::Symbol(hit) => hit,
+        Found::Section(c) => {
+            let mut hit = c.hit;
+            hit.snippet = snippet(&c.title, &c.text);
+            hit
+        }
+    }
 }
 
 /// Symbols matching every word, best first, each flagged when its name or qualified name is the

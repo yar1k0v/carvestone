@@ -120,17 +120,17 @@ impl Precedents {
 
     /// Tokens the printed lines cost an agent (characters divided by four).
     pub fn cost(&self) -> usize {
-        self.lines().iter().map(|l| l.chars().count().div_ceil(4)).sum()
+        self.lines().iter().map(|l| tiers::tokens(l)).sum()
     }
 
     /// Drops the weakest precedents until the cost fits `budget`. `dropped` holds the printed
-    /// lines the limit already cut, in rank order.
+    /// lines the limit already cut.
     fn fit(&mut self, budget: usize, mut dropped: Vec<String>) {
         while self.cost() > budget {
             let Some(last) = self.hits.pop() else {
                 break;
             };
-            dropped.insert(0, last.line());
+            dropped.push(last.line());
             self.truncated = true;
             self.omitted += 1;
             self.left_out = tiers::left_out("precedents", &dropped);
