@@ -18,7 +18,8 @@
 7. Run the full checks once, after the review.
 8. A finding goes back to its own task only.
 9. Commit once per task: `type(scope): summary`, then a blank line and `Refs: CS-n`. NEVER commit or push without the owner's approval.
-10. Before a push, search the unpushed diff for personal names, e-mail addresses and local paths.
+10. Stage only the task's files and hunks. Before the commit, read `git diff --cached --stat`: every file is in the task's `paths` and holds no change from another task or session. Stage a shared file by hunk (`git apply --cached`).
+11. Before a push, search the unpushed diff for personal names, e-mail addresses and local paths.
 
 ## Talking to the owner
 
