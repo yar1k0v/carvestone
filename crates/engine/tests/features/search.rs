@@ -3,6 +3,7 @@
 use carvestone_engine::EngineError;
 use carvestone_engine::edit::Edit;
 use carvestone_engine::search::{Hit, SearchQuery, search};
+use carvestone_engine::tiers::LeftOut;
 
 use crate::support::Store;
 
@@ -82,6 +83,8 @@ fn a_budget_limits_the_output_and_counts_what_it_left_out() {
     let all = search(&repo, &query("shared")).unwrap();
     assert_eq!(ids(&all.hits), ["docs/d1", "docs/d2", "docs/d3", "docs/d4"]);
     assert_eq!((all.truncated, all.omitted), (false, 0));
+    assert_eq!(all.left_out, None);
+    assert!(!all.uncounted);
 
     let two = search(
         &repo,
@@ -93,6 +96,14 @@ fn a_budget_limits_the_output_and_counts_what_it_left_out() {
     .unwrap();
     assert_eq!(ids(&two.hits), ["docs/d1", "docs/d2"]);
     assert_eq!((two.truncated, two.omitted), (true, 2));
+    // Two lines of 41 chars joined by a newline: 83 chars, 21 tokens.
+    let two_out = Some(LeftOut {
+        name: "hits".into(),
+        lines: 2,
+        tokens: 21,
+    });
+    assert_eq!(two.left_out, two_out);
+    assert!(!two.uncounted);
 
     let one = search(
         &repo,
@@ -104,6 +115,29 @@ fn a_budget_limits_the_output_and_counts_what_it_left_out() {
     .unwrap();
     assert_eq!(ids(&one.hits), ["docs/d1"]);
     assert_eq!((one.truncated, one.omitted), (true, 3));
+    // Three lines of 41 chars and two newlines: 125 chars, 32 tokens.
+    assert_eq!(
+        one.left_out,
+        Some(LeftOut {
+            name: "hits".into(),
+            lines: 3,
+            tokens: 32,
+        })
+    );
+    assert!(!one.uncounted);
+
+    // The limit counts like the budget.
+    let limited = search(
+        &repo,
+        &SearchQuery {
+            limit: 2,
+            ..query("shared")
+        },
+    )
+    .unwrap();
+    assert_eq!(ids(&limited.hits), ["docs/d1", "docs/d2"]);
+    assert_eq!(limited.left_out, two_out);
+    assert!(!limited.uncounted);
 }
 
 #[test]

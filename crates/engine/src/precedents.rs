@@ -21,6 +21,7 @@ use crate::git_cache::index_with_history;
 use crate::owner::{Element, arch_elements};
 use crate::repo::{EngineError, Repo};
 use crate::resolve::Snapshot;
+use crate::tiers;
 
 /// Precedents listed when no limit is given.
 pub const DEFAULT_LIMIT: usize = 8;
@@ -98,6 +99,9 @@ pub struct Precedents {
     /// Precedents the limit or the budget left out.
     #[serde(skip_serializing_if = "crate::code::is_zero")]
     pub omitted: usize,
+    /// The size of the precedents the limit or the budget left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub left_out: Option<tiers::LeftOut>,
 }
 
 impl Precedents {
@@ -108,8 +112,8 @@ impl Precedents {
             out.push("no finished task made a similar change".to_string());
         }
         out.extend(self.hits.iter().map(Precedent::line));
-        if self.omitted > 0 {
-            out.push(format!("{} more left out; raise --limit or --budget", self.omitted));
+        if let Some(left) = &self.left_out {
+            out.push(tiers::left_out_line(left, false, "--limit or --budget"));
         }
         out
     }
@@ -119,11 +123,17 @@ impl Precedents {
         self.lines().iter().map(|l| l.chars().count().div_ceil(4)).sum()
     }
 
-    /// Drops the weakest precedents until the cost fits `budget`.
-    fn fit(&mut self, budget: usize) {
-        while self.cost() > budget && self.hits.pop().is_some() {
+    /// Drops the weakest precedents until the cost fits `budget`. `dropped` holds the printed
+    /// lines the limit already cut, in rank order.
+    fn fit(&mut self, budget: usize, mut dropped: Vec<String>) {
+        while self.cost() > budget {
+            let Some(last) = self.hits.pop() else {
+                break;
+            };
+            dropped.insert(0, last.line());
             self.truncated = true;
             self.omitted += 1;
+            self.left_out = tiers::left_out("precedents", &dropped);
         }
     }
 }
@@ -249,15 +259,22 @@ pub fn precedents(repo: &Repo, lookup: &Lookup) -> Result<Precedents, EngineErro
 
     let limit = lookup.limit.unwrap_or(DEFAULT_LIMIT);
     let omitted = ranked.len().saturating_sub(limit);
+    let mut hits: Vec<Precedent> = ranked.into_iter().map(|(_, _, _, p)| p).collect();
+    let dropped: Vec<String> = hits
+        .split_off(hits.len().min(limit))
+        .iter()
+        .map(Precedent::line)
+        .collect();
     let mut result = Precedents {
         basis,
         fallback: by_words.then(|| "words".to_string()),
-        hits: ranked.into_iter().take(limit).map(|(_, _, _, p)| p).collect(),
+        hits,
         truncated: omitted > 0,
         omitted,
+        left_out: tiers::left_out("precedents", &dropped),
     };
     if let Some(budget) = lookup.budget {
-        result.fit(budget);
+        result.fit(budget, dropped);
     }
     Ok(result)
 }

@@ -5,6 +5,7 @@ use carvestone_engine::EngineError;
 use carvestone_engine::commit_msg::trailers_for;
 use carvestone_engine::history::{History, HistoryEntry, HistoryOpts, history};
 use carvestone_engine::precedents::{Lookup, Precedent, Precedents, precedents};
+use carvestone_engine::tiers::LeftOut;
 use carvestone_engine::timeline::{Date, EventKind, TimelineOpts, parse_date, timeline};
 use carvestone_engine::why::{CommitRef, Related, Why, why};
 
@@ -160,6 +161,7 @@ fn why_names_the_task_and_commit_behind_a_line() {
             shallow: false,
             truncated: false,
             omitted: 0,
+            left_out: None,
         }
     );
 
@@ -231,7 +233,66 @@ fn precedents_find_finished_tasks_that_made_the_same_change() {
             ],
             truncated: false,
             omitted: 0,
+            left_out: None,
         }
+    );
+}
+
+#[test]
+fn a_budget_names_the_size_of_what_precedents_and_why_left_out() {
+    let (store, _) = shop();
+    let repo = store.repo();
+
+    // The last decision line of line 1 is "  ADR-1  accepted  Flat fees  via trailer  1 commit":
+    // 51 chars, 13 tokens. Dropping it also drops the "decisions:" heading and adds the notice,
+    // which costs one token less than they save, so a budget one under the cost drops only it.
+    let whole = why(&repo, "src/orders.rs", Some(1), None).unwrap();
+    let cut = why(&repo, "src/orders.rs", Some(1), Some(whole.cost() - 1)).unwrap();
+    assert_eq!((cut.truncated, cut.omitted), (true, 1));
+    assert_eq!(cut.decisions, []);
+    assert_eq!(cut.tasks, whole.tasks);
+    assert_eq!(
+        cut.left_out,
+        Some(LeftOut {
+            name: "entries".into(),
+            lines: 1,
+            tokens: 13,
+        })
+    );
+    assert_eq!(
+        cut.lines().last().unwrap(),
+        "left out: entries (1 line, about 13 tokens); raise --budget"
+    );
+
+    // The last precedent of CS-3 is "CS-4  Add order store  matched added function, folder src
+    // files src/store.rs": 77 chars, 20 tokens. The notice costs 19, so a budget one under the
+    // cost drops only it.
+    let lookup = Lookup {
+        task: Some("CS-3".into()),
+        ..Lookup::default()
+    };
+    let whole = precedents(&repo, &lookup).unwrap();
+    let cut = precedents(
+        &repo,
+        &Lookup {
+            budget: Some(whole.cost() - 1),
+            ..lookup
+        },
+    )
+    .unwrap();
+    assert_eq!((cut.truncated, cut.omitted), (true, 1));
+    assert_eq!(cut.hits, whole.hits[..2]);
+    assert_eq!(
+        cut.left_out,
+        Some(LeftOut {
+            name: "precedents".into(),
+            lines: 1,
+            tokens: 20,
+        })
+    );
+    assert_eq!(
+        cut.lines().last().unwrap(),
+        "left out: precedents (1 line, about 20 tokens); raise --limit or --budget"
     );
 }
 

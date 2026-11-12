@@ -53,11 +53,32 @@ impl Part {
 }
 
 /// How much one part lost.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct LeftOut {
     pub name: String,
     pub lines: usize,
     pub tokens: usize,
+}
+
+/// The size of `dropped`, the printed lines an answer left out; `None` when nothing was dropped.
+pub fn left_out(name: &str, dropped: &[String]) -> Option<LeftOut> {
+    (!dropped.is_empty()).then(|| LeftOut {
+        name: name.to_string(),
+        lines: dropped.len(),
+        tokens: tokens(&dropped.join("\n")),
+    })
+}
+
+/// The line that ends an answer which cut `left` off. `more_uncounted` says that more was cut
+/// that nobody counted; `raise` names the flags that bring it back.
+pub fn left_out_line(left: &LeftOut, more_uncounted: bool, raise: &str) -> String {
+    let noun = if left.lines == 1 { "line" } else { "lines" };
+    let more = if more_uncounted { " and more not counted" } else { "" };
+    format!(
+        "left out: {} ({} {noun}, about {} tokens){more}; raise {raise}",
+        left.name, left.lines, left.tokens
+    )
 }
 
 /// The answer and what it left out of each part.

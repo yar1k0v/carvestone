@@ -10,6 +10,7 @@ use serde::Serialize;
 
 use crate::refresh::{BATCH_FILES, refresh_in};
 use crate::repo::{EngineError, Repo};
+use crate::tiers;
 
 /// Candidates read from the index before boosting and the budget.
 const CANDIDATES: i64 = 1000;
@@ -83,14 +84,23 @@ pub struct SearchResult {
     #[serde(skip_serializing_if = "crate::code::is_zero")]
     #[cfg_attr(feature = "ts", ts(as = "Option<usize>", optional))]
     pub omitted: usize,
+    /// The size of the hits the limit or the budget left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub left_out: Option<tiers::LeftOut>,
+    /// The index returned its full candidate cap, so more hits may exist that were never read.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
+    pub uncounted: bool,
 }
 
 struct Candidate {
     hit: Hit,
     item_id: String,
-    section_id: i64,
     milestone: Option<String>,
     rank: f64,
+    title: String,
+    text: String,
 }
 
 pub fn search(repo: &Repo, q: &SearchQuery) -> Result<SearchResult, EngineError> {
@@ -122,6 +132,8 @@ pub fn search(repo: &Repo, q: &SearchQuery) -> Result<SearchResult, EngineError>
     if found.is_empty() && words.len() > 1 {
         found = candidates(conn, &fts_or(&words), q)?;
     }
+    // Read before the filters below: a full cap means the index holds more than was read.
+    let mut uncounted = found.len() as i64 >= CANDIDATES;
     let in_comp = |item_id: &str| {
         component.as_ref().is_some_and(|comp| {
             in_component.contains(item_id) || item_id == comp || item_id.starts_with(&format!("{comp}/"))
@@ -150,8 +162,9 @@ pub fn search(repo: &Repo, q: &SearchQuery) -> Result<SearchResult, EngineError>
     });
 
     // Symbols named like the query lead, the rest follow the sections.
-    let (named, other_symbols): (Vec<_>, Vec<_>) =
-        symbol_hits(conn, &words, q)?.into_iter().partition(|(named, _)| *named);
+    let symbols = symbol_hits(conn, &words, q)?;
+    uncounted |= symbols.len() as i64 >= SYMBOL_CANDIDATES;
+    let (named, other_symbols): (Vec<_>, Vec<_>) = symbols.into_iter().partition(|(named, _)| *named);
     let ordered: Vec<Found> = named
         .into_iter()
         .map(|(_, hit)| Found::Symbol(hit))
@@ -162,28 +175,26 @@ pub fn search(repo: &Repo, q: &SearchQuery) -> Result<SearchResult, EngineError>
 
     let limit = if q.limit == 0 { 10 } else { q.limit };
     let mut hits = Vec::new();
+    let mut dropped: Vec<String> = Vec::new();
     let mut spent = 0;
-    // Snippets are built only for the hits that are looked at, not for every candidate.
+    let mut stopped = false;
+    // Snippets come from the candidate rows, so a hit past the limit costs no query.
     for item in ordered {
-        if hits.len() == limit {
-            break;
-        }
         let hit = match item {
             Found::Symbol(hit) => hit,
             Found::Section(c) => {
                 let mut hit = c.hit;
-                let (title, text): (String, String) = conn.query_row(
-                    "SELECT title, text FROM sections WHERE id = ?1",
-                    [c.section_id],
-                    |row| Ok((row.get(0)?, row.get(1)?)),
-                )?;
-                hit.snippet = snippet(&title, &text);
+                hit.snippet = snippet(&c.title, &c.text);
                 hit
             }
         };
         let cost = hit.cost();
-        if q.budget.is_some_and(|b| !hits.is_empty() && spent + cost > b) {
-            break;
+        if !stopped && (hits.len() == limit || q.budget.is_some_and(|b| !hits.is_empty() && spent + cost > b)) {
+            stopped = true;
+        }
+        if stopped {
+            dropped.push(hit.line());
+            continue;
         }
         spent += cost;
         hits.push(hit);
@@ -194,6 +205,8 @@ pub fn search(repo: &Repo, q: &SearchQuery) -> Result<SearchResult, EngineError>
         hits,
         truncated: omitted > 0,
         omitted,
+        left_out: tiers::left_out("hits", &dropped),
+        uncounted,
     })
 }
 
@@ -269,11 +282,11 @@ fn fts_or(words: &[String]) -> String {
 
 fn candidates(conn: &Connection, fts: &str, q: &SearchQuery) -> Result<Vec<Candidate>, EngineError> {
     let mut stmt = conn.prepare(
-        "SELECT s.item_id, s.anchor, f.path, s.line_start, s.line_end, s.kind, s.id, s.milestone, \
+        "SELECT s.item_id, s.anchor, f.path, s.line_start, s.line_end, s.kind, s.milestone, s.title, s.text, \
                 bm25(fts, 10.0, 5.0, 1.0) \
          FROM fts JOIN sections s ON s.id = fts.rowid JOIN files f ON f.id = s.file_id \
          WHERE fts MATCH ?1 AND (?2 IS NULL OR s.kind = ?2) AND (?3 IS NULL OR s.status = ?3) \
-         ORDER BY 9 LIMIT ?4",
+         ORDER BY 10 LIMIT ?4",
     )?;
     let rows = stmt.query_map(params![fts, q.kind, q.status, CANDIDATES], |row| {
         let item_id: String = row.get(0)?;
@@ -289,9 +302,10 @@ fn candidates(conn: &Connection, fts: &str, q: &SearchQuery) -> Result<Vec<Candi
                 exactness: None,
             },
             item_id,
-            section_id: row.get(6)?,
-            milestone: row.get(7)?,
-            rank: row.get(8)?,
+            milestone: row.get(6)?,
+            rank: row.get(9)?,
+            title: row.get(7)?,
+            text: row.get(8)?,
         })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)

@@ -18,6 +18,7 @@ use crate::owner::arch_elements;
 use crate::refresh::refresh;
 use crate::repo::{EngineError, Repo};
 use crate::resolve::Snapshot;
+use crate::tiers;
 
 /// Commits listed when no line is given.
 const RECENT: usize = 5;
@@ -68,6 +69,10 @@ pub struct Why {
     #[serde(skip_serializing_if = "crate::code::is_zero")]
     #[cfg_attr(feature = "ts", ts(as = "Option<usize>", optional))]
     pub omitted: usize,
+    /// The size of the entries the budget left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub left_out: Option<tiers::LeftOut>,
 }
 
 impl Why {
@@ -108,8 +113,8 @@ impl Why {
         block(&mut out, "plans", self.plans.iter().map(related_line));
         block(&mut out, "decisions", self.decisions.iter().map(related_line));
         block(&mut out, "docs", self.docs.iter().map(related_line));
-        if self.omitted > 0 {
-            out.push(format!("{} more left out; raise --budget", self.omitted));
+        if let Some(left) = &self.left_out {
+            out.push(tiers::left_out_line(left, false, "--budget"));
         }
         out
     }
@@ -121,17 +126,24 @@ impl Why {
 
     /// Drops the least useful entries until the cost fits `budget`.
     fn fit(&mut self, budget: usize) {
+        // The printed lines of the dropped entries, the last one dropped first.
+        let mut dropped: Vec<String> = Vec::new();
         while self.cost() > budget {
-            let dropped = self.docs.pop().is_some()
-                || self.plans.pop().is_some()
-                || self.decisions.pop().is_some()
-                || self.commits.pop().is_some()
-                || self.tasks.pop().is_some();
-            if !dropped {
+            let line = self
+                .docs
+                .pop()
+                .map(|r| related_line(&r))
+                .or_else(|| self.plans.pop().map(|r| related_line(&r)))
+                .or_else(|| self.decisions.pop().map(|r| related_line(&r)))
+                .or_else(|| self.commits.pop().map(|c| commit_line(&c)))
+                .or_else(|| self.tasks.pop().map(|r| related_line(&r)));
+            let Some(line) = line else {
                 break;
-            }
+            };
+            dropped.insert(0, format!("  {line}"));
             self.truncated = true;
             self.omitted += 1;
+            self.left_out = tiers::left_out("entries", &dropped);
         }
     }
 }
@@ -408,6 +420,7 @@ pub fn why(repo: &Repo, path: &str, line: Option<u32>, budget: Option<usize>) ->
         shallow,
         truncated: false,
         omitted: 0,
+        left_out: None,
     };
     if let Some(budget) = budget {
         result.fit(budget);

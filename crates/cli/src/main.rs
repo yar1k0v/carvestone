@@ -1703,8 +1703,19 @@ fn render_search(
     let lines = lean::search_lines(&result.hits, titles);
     Ok(lean::fit(budget, lines.len(), |kept| {
         let mut out = lines[..kept].join("\n") + "\n";
-        // Lines the CLI merged stand for hits it printed, so only lines past the budget count.
-        out.push_str(&code_tail(result.omitted + (lines.len() - kept), None));
+        // Lines the CLI merged stand for hits it printed, so only lines past the budget count on
+        // top of what the engine dropped.
+        let engine = result.left_out.as_ref();
+        let cut = &lines[kept..];
+        let left = tiers::LeftOut {
+            name: "hits".to_string(),
+            lines: engine.map_or(0, |l| l.lines) + cut.len(),
+            tokens: engine.map_or(0, |l| l.tokens) + tiers::tokens(&cut.join("\n")),
+        };
+        if left.lines > 0 || result.uncounted {
+            out.push_str(&tiers::left_out_line(&left, result.uncounted, "--limit or --budget"));
+            out.push('\n');
+        }
         out
     }))
 }

@@ -166,12 +166,14 @@ fn typical_calls_stay_under_their_bars() {
         Call {
             label: "search reconcile ledger",
             args: &["search", "reconcile ledger"],
-            bar: 96,
+            // 98: the left-out line now states the size of the hits it cut.
+            bar: 98,
         },
         Call {
             label: "search reconcile ledger --budget 200",
             args: &["search", "reconcile ledger", "--budget", "200"],
-            bar: 96,
+            // 98: the left-out line now states the size of the hits it cut.
+            bar: 98,
         },
         Call {
             label: "code uses Shop.Ledger.Post",
@@ -287,6 +289,13 @@ fn budget_output_stays_within_the_budget() {
     assert!(
         out.lines().last().unwrap_or_default().ends_with("; raise --budget"),
         "no cut-off line in:\n{out}"
+    );
+    let (code, out) = repo.run(&["search", "reconcile ledger", "--budget", "1"]);
+    assert_eq!(code, 0, "{out}");
+    let last = out.lines().last().unwrap_or_default();
+    assert!(
+        last.starts_with("left out: ") && last.contains("about") && last.ends_with("; raise --limit or --budget"),
+        "no left-out line in:\n{out}"
     );
     let (code, out) = repo.run(&["code", "explain", "arch/shop", "--budget", "60"]);
     assert_eq!(code, 0, "{out}");

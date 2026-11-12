@@ -1,4 +1,4 @@
-use carvestone_engine::tiers::{LeftOut, Part, fit, tokens};
+use carvestone_engine::tiers::{LeftOut, Part, fit, left_out_line, tokens};
 
 /// Ten lines of 19 characters: the `doc text` part of the worked example.
 fn doc_lines() -> Vec<String> {
@@ -109,5 +109,42 @@ fn every_budget_keeps_the_critical_part_and_the_guarantee() {
         let kept = fitted.text.lines().count() - 1 - usize::from(!fitted.left_out.is_empty());
         let dropped: usize = fitted.left_out.iter().map(|out| out.lines).sum();
         assert_eq!(kept + dropped, 12, "budget {budget}: {}", fitted.text);
+    }
+}
+
+#[test]
+fn the_left_out_line_names_what_was_cut_and_its_size() {
+    let hits = LeftOut {
+        name: "hits".to_string(),
+        lines: 2,
+        tokens: 21,
+    };
+    let entries = LeftOut {
+        name: "entries".to_string(),
+        lines: 1,
+        tokens: 9,
+    };
+    let rows = [
+        (
+            &hits,
+            false,
+            "--limit or --budget",
+            "left out: hits (2 lines, about 21 tokens); raise --limit or --budget",
+        ),
+        (
+            &entries,
+            false,
+            "--budget",
+            "left out: entries (1 line, about 9 tokens); raise --budget",
+        ),
+        (
+            &hits,
+            true,
+            "--limit or --budget",
+            "left out: hits (2 lines, about 21 tokens) and more not counted; raise --limit or --budget",
+        ),
+    ];
+    for (left, more, raise, want) in rows {
+        assert_eq!(left_out_line(left, more, raise), want);
     }
 }
