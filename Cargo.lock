@@ -220,7 +220,7 @@ checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
 name = "carvestone-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "carvestone-core",
@@ -237,7 +237,7 @@ dependencies = [
 
 [[package]]
 name = "carvestone-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -248,7 +248,7 @@ dependencies = [
 
 [[package]]
 name = "carvestone-engine"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "blake3",
  "carvestone-core",
@@ -271,14 +271,14 @@ dependencies = [
 
 [[package]]
 name = "carvestone-git"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "thiserror 2.0.21",
 ]
 
 [[package]]
 name = "carvestone-graph"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "protobuf",
  "scip",
@@ -294,7 +294,7 @@ dependencies = [
 
 [[package]]
 name = "carvestone-index"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "carvestone-core",
  "rusqlite",
@@ -303,7 +303,7 @@ dependencies = [
 
 [[package]]
 name = "carvestone-mcp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "carvestone-engine",
  "rmcp",
@@ -315,7 +315,7 @@ dependencies = [
 
 [[package]]
 name = "carvestone-server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "carvestone-engine",
@@ -332,7 +332,7 @@ dependencies = [
 
 [[package]]
 name = "carvestone-store"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "carvestone-core",
  "serde_json",
