@@ -92,6 +92,7 @@ okf_version: "0.2"
 - [M-16: Rust test rewrite](milestones/M-16.md) - Replace the 1,194 Rust tests with a small feature suite, then delete the old tests in one step (ADR-15).
 - [M-17: First public release](milestones/M-17.md) - A stranger on any stack installs Stone, reads what it is in one line, and understands a product from its C4 diagrams. Done when the public repo is live, per ADR-16 to ADR-19.
 - [M-18: Agent-first read surface](milestones/M-18.md) - An agent gets the context of its task in one or two calls, and trusts the answer. Done when the three stages of ADR-21 are in place and measured.
+- [M-19: Code health after M-18](milestones/M-19.md)
 
 # Tasks
 
@@ -328,5 +329,8 @@ okf_version: "0.2"
 - [CS-250: Crew skills start from stone map, brief and task check](tasks/CS-250.md) - The crew skills still tell agents to gather task context with get, precedents and code explain, and to judge readiness by reading. Stone now has stone map, stone brief <task> and stone task check <id> for that (ADR-21).…
 - [CS-251: One call runs a check and prints only its result lines](tasks/CS-251.md) - A worker spends about two requests on each check: it runs cargo with the output sent to a scratch file, then greps or reads that file for the pass counts. In 22 developer runs that was 134 cargo runs, 81 greps and 19…
 - [CS-252: The brief lists the plan's code targets with their line ranges](tasks/CS-252.md) - A worker greps inside files its plan already names, to find the lines of a symbol: 71 of 194 greps in 22 developer runs. The brief prints whole-file outlines, but they are optional and are cut at the default size. This…
-- [CS-253: Refactoring pass: candidates found during CS-243 and CS-244](tasks/CS-253.md) - 2026-11-12: Refactor candidate (from CS-243): crates/engine/src/session_hook.rs:68 write_session_hook repeats the lock, read, UTF-8 check, compare and write_atomic flow of crates/engine/src/agent_block.rs:179…
+- [CS-253: Refactor: shared helpers for the session hook and the agent block](tasks/CS-253.md) - One shared lock-read-apply-write helper for the files the user owns (.claude/settings.json and CLAUDE.md or AGENTS.md), one ask rule for the init offers, and a run_map_hook helper. No output changes.
 - [CS-254: Code lists state the size of what they left out](tasks/CS-254.md) - Split from CS-244 by the owner: CodeResult, Outline, Impact, PathResult, Explain and Entries end a cut answer with a count only (code_tail). Move them to the left-out line that CS-244 adds. Not planned yet.
+- [CS-255: Refactor: token and left-out helpers in tiers](tasks/CS-255.md) - One token rule (tiers::tokens) in every cost(), no front inserts in the fit loops, a two-step search hit loop, and one LeftOut sum helper for render_search. No output changes.
+- [CS-256: Refactor: split why, precedents and tiers::fit into named parts](tasks/CS-256.md) - why, precedents and tiers::fit each hand self-contained blocks to named private functions (commits_named, trailer_lists, rank, share_room), so each one reads top to bottom. No output changes.
+- [CS-257: Adding the session hook keeps CRLF line endings in .claude/settings.json](tasks/CS-257.md)

@@ -3,8 +3,6 @@
 //! The hook lives in the user's `.claude/settings.json`, so the merge keeps every other key and
 //! the order of the file, and a second run writes nothing.
 
-use carvestone_store::write::write_atomic;
-
 use crate::repo::{EngineError, Repo};
 
 /// Where Claude Code reads the hooks of a project.
@@ -33,15 +31,7 @@ pub fn apply(text: &str) -> Result<String, String> {
             .get("hooks")
             .and_then(serde_json::Value::as_array)
             .ok_or("a `hooks.SessionStart` entry has no `hooks` array")?;
-        for hook in entry_hooks {
-            let command = hook.get("command").and_then(serde_json::Value::as_str);
-            if command.is_some_and(|command| {
-                let command = command.trim();
-                command.ends_with("stone map") || command.ends_with("stone.exe map")
-            }) {
-                present = true;
-            }
-        }
+        present |= entry_hooks.iter().any(runs_the_map);
     }
     if present {
         return Ok(text.to_string());
@@ -52,6 +42,16 @@ pub fn apply(text: &str) -> Result<String, String> {
     let mut out = serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?;
     out.push('\n');
     Ok(out)
+}
+
+/// Whether one hook entry runs `stone map`.
+fn runs_the_map(hook: &serde_json::Value) -> bool {
+    hook.get("command")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|command| {
+            let command = command.trim();
+            command.ends_with("stone map") || command.ends_with("stone.exe map")
+        })
 }
 
 /// What `write_session_hook` did.
@@ -66,29 +66,14 @@ pub struct SessionHook {
 impl Repo {
     /// Adds the SessionStart hook to `.claude/settings.json` at the repository root.
     pub fn write_session_hook(&self) -> Result<SessionHook, EngineError> {
-        let lock = self.store.lock()?;
         let path = self.store.layout.root.join(SETTINGS);
-        let text = match std::fs::read(&path) {
-            Ok(bytes) => String::from_utf8(bytes)
-                .map_err(|_| EngineError::Invalid(format!("{SETTINGS} is not valid UTF-8; nothing was written")))?,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-            Err(e) => return Err(EngineError::Invalid(format!("cannot read {SETTINGS}: {e}"))),
-        };
-        let next = apply(&text).map_err(|why| {
-            EngineError::Invalid(format!(
-                "{SETTINGS}: {why}; nothing was written. Add a SessionStart hook with the command `{COMMAND}` by hand"
-            ))
+        let changed = self.rewrite_root_file(&path, SETTINGS, |text| {
+            apply(text).map_err(|why| {
+                EngineError::Invalid(format!(
+                    "{SETTINGS}: {why}; nothing was written. Add a SessionStart hook with the command `{COMMAND}` by hand"
+                ))
+            })
         })?;
-        let changed = next != text;
-        if changed {
-            if let Some(folder) = path.parent() {
-                std::fs::create_dir_all(folder)
-                    .map_err(|e| EngineError::Invalid(format!("cannot create {}: {e}", folder.display())))?;
-            }
-            write_atomic(&path, &next)?;
-        }
-        // Held to here so two writers never replace the file from the same stale read.
-        drop(lock);
         Ok(SessionHook {
             file: SETTINGS.to_string(),
             changed,

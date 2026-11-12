@@ -6,8 +6,6 @@
 
 use std::path::{Path, PathBuf};
 
-use carvestone_store::write::write_atomic;
-
 use crate::check::Problem;
 use crate::repo::{EngineError, Repo};
 
@@ -177,30 +175,19 @@ pub struct AgentBlock {
 impl Repo {
     /// Adds the block to `CLAUDE.md` or `AGENTS.md` at the repository root, or refreshes it between its markers.
     pub fn write_agent_block(&self) -> Result<AgentBlock, EngineError> {
-        let lock = self.store.lock()?;
         let root = &self.store.layout.root;
         let path = target(root);
         let file = path
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let text = match std::fs::read(&path) {
-            Ok(bytes) => String::from_utf8(bytes)
-                .map_err(|_| EngineError::Invalid(format!("{file} is not valid UTF-8; nothing was written")))?,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-            Err(e) => return Err(EngineError::Invalid(format!("cannot read {file}: {e}"))),
-        };
-        let next = apply(&text).map_err(|why| {
-            EngineError::Invalid(format!(
-                "{file} has a broken stone block: {why}; fix the markers by hand"
-            ))
+        let changed = self.rewrite_root_file(&path, &file, |text| {
+            apply(text).map_err(|why| {
+                EngineError::Invalid(format!(
+                    "{file} has a broken stone block: {why}; fix the markers by hand"
+                ))
+            })
         })?;
-        let changed = next != text;
-        if changed {
-            write_atomic(&path, &next)?;
-        }
-        // Held to here so two writers never replace the file from the same stale read.
-        drop(lock);
         Ok(AgentBlock { file, changed })
     }
 }

@@ -1004,15 +1004,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::Code { command } => print!("{}", run_code(&repo, &command, cli.json)?),
         Command::Map { budget, install_hook } => {
             if install_hook {
-                let done = repo.write_session_hook()?;
-                if cli.json {
-                    let value = serde_json::json!({ "file": done.file, "changed": done.changed });
-                    println!("{}", serde_json::to_string_pretty(&value)?);
-                } else if done.changed {
-                    println!("added the session hook to {}", session_hook::SETTINGS);
-                } else {
-                    println!("no change: {} already runs the map", session_hook::SETTINGS);
-                }
+                print!("{}", run_map_hook(&repo, cli.json)?);
             } else {
                 print!("{}", render_project_map(&repo.project_map()?, cli.json, budget)?);
             }
@@ -1283,6 +1275,19 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::Init { .. } | Command::Instructions { .. } => {}
     }
     Ok(ExitCode::SUCCESS)
+}
+
+fn run_map_hook(repo: &Repo, json: bool) -> anyhow::Result<String> {
+    let done = repo.write_session_hook()?;
+    if json {
+        let value = serde_json::json!({ "file": done.file, "changed": done.changed });
+        return Ok(format!("{}\n", serde_json::to_string_pretty(&value)?));
+    }
+    Ok(if done.changed {
+        format!("added the session hook to {}\n", session_hook::SETTINGS)
+    } else {
+        format!("no change: {} already runs the map\n", session_hook::SETTINGS)
+    })
 }
 
 fn run_commit_msg(
@@ -2335,8 +2340,7 @@ fn offer_agent_block(root: &std::path::Path, yes: bool, json: bool) -> anyhow::R
     let prompt = format!(
         "Add a short stone block to {file} so agents find the stone CLI? Text outside it is never touched. [y/N] "
     );
-    let agreed = yes || (!json && std::io::stdin().is_terminal() && ask_yes(&prompt)?);
-    if !agreed {
+    if !agreed(yes, json, &prompt)? {
         return Ok(BlockOffer::Declined(file));
     }
     let done = Repo::open(&root)?.write_agent_block()?;
@@ -2359,12 +2363,17 @@ fn offer_session_hook(root: &std::path::Path, yes: bool, json: bool) -> anyhow::
         "Add a Claude Code SessionStart hook to {} so each session starts with `stone map`? [y/N] ",
         session_hook::SETTINGS
     );
-    let agreed = yes || (!json && std::io::stdin().is_terminal() && ask_yes(&prompt)?);
-    if !agreed {
+    if !agreed(yes, json, &prompt)? {
         return Ok(HookOffer::Declined);
     }
     Repo::open(&root)?.write_session_hook()?;
     Ok(HookOffer::Added)
+}
+
+/// Whether the user agreed to a write into their own file: the flag is the yes, a terminal is
+/// asked, and anything else (a pipe, CI, `--json`) is a no, so nothing is written unasked.
+fn agreed(yes: bool, json: bool, prompt: &str) -> anyhow::Result<bool> {
+    Ok(yes || (!json && std::io::stdin().is_terminal() && ask_yes(prompt)?))
 }
 
 fn ask_yes(prompt: &str) -> anyhow::Result<bool> {

@@ -60,6 +60,7 @@ pub mod renumber;
 pub mod repo;
 pub mod repos;
 pub mod resolve;
+mod root_file;
 pub mod scan;
 pub mod search;
 pub mod service_map;
