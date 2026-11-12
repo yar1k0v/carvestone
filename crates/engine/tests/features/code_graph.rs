@@ -70,7 +70,7 @@ fn rust_project() -> Store {
 fn each_language_finds_a_definition_and_its_call_site_in_another_file() {
     // (language, files, name, find lines, uses lines)
     type Row<'a> = (&'a str, &'a [(&'a str, &'a str)], &'a str, &'a [&'a str], &'a [&'a str]);
-    let rows: [Row; 5] = [
+    let rows: [Row; 6] = [
         (
             "rust",
             &[
@@ -88,6 +88,24 @@ fn each_language_finds_a_definition_and_its_call_site_in_another_file() {
                 "src/app.rs  src/app.rs:L1-5  imports  exact  @L1",
                 "app::run  src/app.rs:L3-5  calls  exact  @L4 pub fn run() -> u32",
             ],
+        ),
+        (
+            "rust method",
+            &[
+                ("Cargo.toml", CARGO),
+                ("src/lib.rs", "pub mod app;\npub mod world;\n"),
+                (
+                    "src/world.rs",
+                    "pub struct World;\n\nimpl World {\n    pub fn new() -> World {\n        World\n    }\n}\n",
+                ),
+                (
+                    "src/app.rs",
+                    "use crate::world::World;\n\npub fn run() -> World {\n    World::new()\n}\n",
+                ),
+            ],
+            "World::new",
+            &["world::World::new  src/world.rs:L4-6  method  exact  pub fn new() -> World"],
+            &["app::run  src/app.rs:L3-5  calls  exact  @L4 pub fn run() -> World"],
         ),
         (
             "typescript",

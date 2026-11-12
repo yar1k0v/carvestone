@@ -215,9 +215,15 @@ pub(crate) fn resolve_target(conn: &Connection, input: &str) -> Result<Target, E
             file_id: None,
         });
     }
-    let mut stmt =
-        conn.prepare("SELECT DISTINCT qname FROM symbols WHERE name = ?1 AND kind != 'file' ORDER BY qname")?;
-    let names: Vec<String> = stmt.query_map([&text], |row| row.get(0))?.collect::<Result<_, _>>()?;
+    let [tail_colons, tail_dot] = tail_patterns(&text);
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT qname FROM symbols \
+         WHERE (name = ?1 OR qname LIKE ?2 ESCAPE '\\' OR qname LIKE ?3 ESCAPE '\\') AND kind != 'file' \
+         ORDER BY qname",
+    )?;
+    let names: Vec<String> = stmt
+        .query_map(params![text, tail_colons, tail_dot], |row| row.get(0))?
+        .collect::<Result<_, _>>()?;
     match names.as_slice() {
         [] => Err(EngineError::Invalid(format!(
             "no symbol or file matches `{text}`; try `stone code find {text}`"
@@ -243,6 +249,13 @@ fn escape_like(text: &str) -> String {
     text.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
 }
 
+/// LIKE patterns for a qualified name that ends in `text` after `::` or `.`: the same tail rule as
+/// `code_entries::symbol_matches`.
+fn tail_patterns(text: &str) -> [String; 2] {
+    let escaped = escape_like(text);
+    [format!("%::{escaped}"), format!("%.{escaped}")]
+}
+
 fn result(conn: &Connection, q: &CodeQuery, query: String, hits: Vec<Hit>) -> Result<CodeResult, EngineError> {
     let (hits, omitted, left_out) = cut(hits, q.limit, q.budget);
     Ok(CodeResult {
@@ -260,7 +273,7 @@ fn result(conn: &Connection, q: &CodeQuery, query: String, hits: Vec<Hit>) -> Re
 const NO_ROOTS_NOTE: &str =
     "no code is indexed, because stone/config.yml has no code_roots; add code_roots: [.] to index the whole repo";
 
-/// Symbols by qualified name, exact name or prefix of either.
+/// Symbols by qualified name, exact name, tail of the qualified name, or prefix of either.
 pub fn find(repo: &Repo, q: &CodeQuery) -> Result<CodeResult, EngineError> {
     let text = q.target.trim();
     if text.is_empty() {
@@ -270,16 +283,19 @@ pub fn find(repo: &Repo, q: &CodeQuery) -> Result<CodeResult, EngineError> {
     let index = open(repo)?;
     let conn = index.conn();
     let like = format!("{}%", escape_like(text));
+    let [tail_colons, tail_dot] = tail_patterns(text);
     let mut stmt = conn.prepare(
         "SELECT s.qname, s.kind, s.signature, s.line_start, s.line_end, f.path, \
-                CASE WHEN s.qname = ?1 THEN 0 WHEN s.name = ?1 THEN 1 ELSE 2 END \
+                CASE WHEN s.qname = ?1 THEN 0 WHEN s.name = ?1 THEN 1 \
+                     WHEN s.qname LIKE ?5 ESCAPE '\\' OR s.qname LIKE ?6 ESCAPE '\\' THEN 1 ELSE 2 END \
          FROM symbols s JOIN files f ON f.id = s.file_id \
-         WHERE (s.qname = ?1 OR s.name = ?1 OR s.qname LIKE ?2 ESCAPE '\\' OR s.name LIKE ?2 ESCAPE '\\') \
+         WHERE (s.qname = ?1 OR s.name = ?1 OR s.qname LIKE ?2 ESCAPE '\\' OR s.name LIKE ?2 ESCAPE '\\' \
+                OR s.qname LIKE ?5 ESCAPE '\\' OR s.qname LIKE ?6 ESCAPE '\\') \
            AND (?3 IS NULL OR s.kind = ?3) AND (?3 = 'file' OR s.kind != 'file') \
          ORDER BY 7, s.qname, f.path, s.line_start LIMIT ?4",
     )?;
     let hits: Vec<Hit> = stmt
-        .query_map(params![text, like, kind, FIND_ROWS], |row| {
+        .query_map(params![text, like, kind, FIND_ROWS, tail_colons, tail_dot], |row| {
             let qname: String = row.get(0)?;
             let kind: String = row.get(1)?;
             let path: String = row.get(5)?;
