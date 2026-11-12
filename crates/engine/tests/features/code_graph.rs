@@ -70,7 +70,7 @@ fn rust_project() -> Store {
 fn each_language_finds_a_definition_and_its_call_site_in_another_file() {
     // (language, files, name, find lines, uses lines)
     type Row<'a> = (&'a str, &'a [(&'a str, &'a str)], &'a str, &'a [&'a str], &'a [&'a str]);
-    let rows: [Row; 6] = [
+    let rows: [Row; 10] = [
         (
             "rust",
             &[
@@ -106,6 +106,86 @@ fn each_language_finds_a_definition_and_its_call_site_in_another_file() {
             "World::new",
             &["world::World::new  src/world.rs:L4-6  method  exact  pub fn new() -> World"],
             &["app::run  src/app.rs:L3-5  calls  exact  @L4 pub fn run() -> World"],
+        ),
+        (
+            "rust macro call",
+            &[
+                ("Cargo.toml", CARGO),
+                ("src/lib.rs", "pub mod app;\npub mod util;\n"),
+                ("src/util.rs", "pub fn helper() -> u32 {\n    1\n}\n"),
+                (
+                    "src/app.rs",
+                    "use crate::util::helper;\n\npub fn run() -> String {\n    format!(\"{}\", helper())\n}\n",
+                ),
+            ],
+            "helper",
+            &["util::helper  src/util.rs:L1-3  function  exact  pub fn helper() -> u32"],
+            &[
+                "src/app.rs  src/app.rs:L1-5  imports  exact  @L1",
+                "app::run  src/app.rs:L3-5  calls  exact  @L4 pub fn run() -> String",
+            ],
+        ),
+        (
+            "rust module and method",
+            &[
+                ("Cargo.toml", CARGO),
+                ("src/lib.rs", "pub mod app;\npub mod world;\n"),
+                (
+                    "src/world.rs",
+                    "pub struct Globe;\n\npub fn make() -> Globe {\n    Globe\n}\n\nimpl Globe {\n    pub fn world(&self) -> u32 {\n        1\n    }\n}\n",
+                ),
+                (
+                    "src/app.rs",
+                    "use crate::world;\n\npub fn run() -> String {\n    format!(\"{}\", world::make().world())\n}\n",
+                ),
+            ],
+            "world",
+            &[
+                "world  src/lib.rs:L2-2  module  exact  pub mod world;",
+                "world::Globe::world  src/world.rs:L8-10  method  exact  pub fn world(&self) -> u32",
+                "world::Globe  src/world.rs:L1-1  type  exact  pub struct Globe",
+                "world::make  src/world.rs:L3-5  function  exact  pub fn make() -> Globe",
+            ],
+            &[
+                "src/app.rs  src/app.rs:L1-5  imports  exact  @L1",
+                "app::run  src/app.rs:L3-5  calls  inferred  @L4 pub fn run() -> String",
+            ],
+        ),
+        (
+            "rust module and two methods",
+            &[
+                ("Cargo.toml", CARGO),
+                ("src/lib.rs", "pub mod app;\npub mod world;\n"),
+                (
+                    "src/world.rs",
+                    "pub struct Globe;\npub struct Moon;\n\nimpl Globe {\n    pub fn world(&self) -> u32 {\n        1\n    }\n}\n\nimpl Moon {\n    pub fn world(&self) -> u32 {\n        2\n    }\n}\n",
+                ),
+                ("src/app.rs", "use crate::world;\n\npub fn run() {}\n"),
+            ],
+            "world",
+            &[
+                "world  src/lib.rs:L2-2  module  exact  pub mod world;",
+                "world::Globe::world  src/world.rs:L5-7  method  exact  pub fn world(&self) -> u32",
+                "world::Moon::world  src/world.rs:L11-13  method  exact  pub fn world(&self) -> u32",
+                "world::Globe  src/world.rs:L1-1  type  exact  pub struct Globe",
+                "world::Moon  src/world.rs:L2-2  type  exact  pub struct Moon",
+            ],
+            &["src/app.rs  src/app.rs:L1-3  imports  exact  @L1"],
+        ),
+        (
+            "rust fn declared in a macro body",
+            &[
+                ("Cargo.toml", CARGO),
+                ("src/lib.rs", "pub mod app;\npub mod util;\n"),
+                ("src/util.rs", "pub fn zz_target() {}\n"),
+                (
+                    "src/app.rs",
+                    "use crate::util::zz_target;\n\npub fn run() {\n    declare! { fn zz_target() {} }\n}\n",
+                ),
+            ],
+            "zz_target",
+            &["util::zz_target  src/util.rs:L1-1  function  exact  pub fn zz_target()"],
+            &["src/app.rs  src/app.rs:L1-5  imports  exact  @L1"],
         ),
         (
             "typescript",

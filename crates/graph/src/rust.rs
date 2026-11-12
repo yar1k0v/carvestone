@@ -522,6 +522,14 @@ fn walk_sites(
             if let Some(path) = node.child_by_field_name("macro") {
                 skip.push(path.id());
             }
+            let mut cursor = node.walk();
+            let trees: Vec<Node> = node
+                .children(&mut cursor)
+                .filter(|c| c.kind() == "token_tree")
+                .collect();
+            for tree in trees {
+                macro_calls(tree, src, out);
+            }
         }
         "struct_expression" => {
             if let Some(name) = node.child_by_field_name("name") {
@@ -681,6 +689,58 @@ fn macro_site(node: Node, src: &str, decls: &[Decl]) -> Option<RefSite> {
         line,
         scope: scope_at(decls, line),
     })
+}
+
+/// Macro arguments are a flat token tree in tree-sitter, so calls written in them are found by this
+/// token pattern: an identifier followed by a parenthesized group.
+fn macro_calls(tree: Node, src: &str, out: &mut Sink) {
+    let mut cursor = tree.walk();
+    let children: Vec<Node> = tree.children(&mut cursor).collect();
+    let is_segment = |node: Node| matches!(node.kind(), "identifier" | "self" | "crate" | "super");
+    for (i, group) in children.iter().enumerate() {
+        if group.kind() != "token_tree" {
+            continue;
+        }
+        macro_calls(*group, src, out);
+        if i == 0 || !text(*group, src).starts_with('(') || children[i - 1].kind() != "identifier" {
+            continue;
+        }
+        // `fn f(...)` in a macro body declares f; it does not call it.
+        if i >= 2 && children[i - 2].kind() == "fn" {
+            continue;
+        }
+        let name = children[i - 1];
+        let qualifier = if i >= 2 && children[i - 2].kind() == "." {
+            let receiver = if i >= 3 && is_segment(children[i - 3]) {
+                text(children[i - 3], src).trim()
+            } else {
+                ""
+            };
+            Some(format!(".{receiver}"))
+        } else if i >= 2 && children[i - 2].kind() == "::" {
+            let mut parts: Vec<&str> = Vec::new();
+            let mut j = i - 2;
+            while children[j].kind() == "::" && j >= 1 && is_segment(children[j - 1]) {
+                parts.push(text(children[j - 1], src).trim());
+                if j < 2 {
+                    break;
+                }
+                j -= 2;
+            }
+            parts.reverse();
+            if parts.is_empty() { None } else { Some(parts.join("::")) }
+        } else {
+            None
+        };
+        let line = line_of(name.start_position().row);
+        out.refs.push(RefSite {
+            name: text(name, src).trim().to_string(),
+            qualifier,
+            kind: RefKind::Calls,
+            line,
+            scope: scope_at(&out.decls, line),
+        });
+    }
 }
 
 struct UseLeaf {

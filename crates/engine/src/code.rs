@@ -175,7 +175,8 @@ fn file_target(conn: &Connection, path: &str, file_id: i64) -> Result<Target, En
     })
 }
 
-/// A qualified name, a unique plain name, a path, or `path:line`.
+/// A qualified name, a unique plain name, a path, or `path:line`; a bare name shared by a module and one
+/// other symbol resolves to both, and by a module and two or more others to the module alone.
 pub(crate) fn resolve_target(conn: &Connection, input: &str) -> Result<Target, EngineError> {
     let text = input.trim().replace('\\', "/");
     if text.is_empty() {
@@ -209,21 +210,38 @@ pub(crate) fn resolve_target(conn: &Connection, input: &str) -> Result<Target, E
     }
     let by_qname = ids_where(conn, "SELECT id FROM symbols WHERE qname = ?1 ORDER BY id", &text)?;
     if !by_qname.is_empty() {
+        let non_modules: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM symbols WHERE qname = ?1 AND kind <> 'module'",
+            [&text],
+            |row| row.get(0),
+        )?;
+        if non_modules > 0 {
+            return Ok(Target {
+                label: text,
+                ids: by_qname,
+                file_id: None,
+            });
+        }
+        let others: Vec<String> = tail_names(conn, &text)?
+            .into_iter()
+            .filter(|name| *name != text)
+            .collect();
+        // Two or more others: the module alone, so every name the candidates error offers resolves.
+        let mut ids = by_qname;
+        if let [qname] = others.as_slice() {
+            ids.extend(ids_where(
+                conn,
+                "SELECT id FROM symbols WHERE qname = ?1 ORDER BY id",
+                qname,
+            )?);
+        }
         return Ok(Target {
             label: text,
-            ids: by_qname,
+            ids,
             file_id: None,
         });
     }
-    let [tail_colons, tail_dot] = tail_patterns(&text);
-    let mut stmt = conn.prepare(
-        "SELECT DISTINCT qname FROM symbols \
-         WHERE (name = ?1 OR qname LIKE ?2 ESCAPE '\\' OR qname LIKE ?3 ESCAPE '\\') AND kind != 'file' \
-         ORDER BY qname",
-    )?;
-    let names: Vec<String> = stmt
-        .query_map(params![text, tail_colons, tail_dot], |row| row.get(0))?
-        .collect::<Result<_, _>>()?;
+    let names = tail_names(conn, &text)?;
     match names.as_slice() {
         [] => Err(EngineError::Invalid(format!(
             "no symbol or file matches `{text}`; try `stone code find {text}`"
@@ -233,16 +251,32 @@ pub(crate) fn resolve_target(conn: &Connection, input: &str) -> Result<Target, E
             label: qname.clone(),
             file_id: None,
         }),
-        many => {
-            let shown: Vec<&str> = many.iter().take(CANDIDATES_SHOWN).map(String::as_str).collect();
-            let more = if many.len() > CANDIDATES_SHOWN { ", ..." } else { "" };
-            Err(EngineError::Invalid(format!(
-                "{text} matches {} symbols; use one of: {}{more}",
-                many.len(),
-                shown.join(", ")
-            )))
-        }
+        many => Err(ambiguous(&text, many)),
     }
+}
+
+/// Qualified names whose name or tail after `::` or `.` is `text`, files excluded.
+fn tail_names(conn: &Connection, text: &str) -> Result<Vec<String>, EngineError> {
+    let [tail_colons, tail_dot] = tail_patterns(text);
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT qname FROM symbols \
+         WHERE (name = ?1 OR qname LIKE ?2 ESCAPE '\\' OR qname LIKE ?3 ESCAPE '\\') AND kind != 'file' \
+         ORDER BY qname",
+    )?;
+    let names = stmt
+        .query_map(params![text, tail_colons, tail_dot], |row| row.get(0))?
+        .collect::<Result<_, _>>()?;
+    Ok(names)
+}
+
+fn ambiguous(text: &str, names: &[String]) -> EngineError {
+    let shown: Vec<&str> = names.iter().take(CANDIDATES_SHOWN).map(String::as_str).collect();
+    let more = if names.len() > CANDIDATES_SHOWN { ", ..." } else { "" };
+    EngineError::Invalid(format!(
+        "{text} matches {} symbols; use one of: {}{more}",
+        names.len(),
+        shown.join(", ")
+    ))
 }
 
 fn escape_like(text: &str) -> String {
