@@ -45,6 +45,7 @@ pub mod guide;
 pub mod history;
 mod index_file;
 pub mod links;
+pub mod merge;
 pub mod modules;
 mod new_item;
 pub mod owner;

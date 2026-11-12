@@ -236,6 +236,7 @@ pub const CLI_COMMANDS: &[&str] = &[
     "history",
     "timeline",
     "commit-msg",
+    "merge-file",
     "serve",
 ];
 

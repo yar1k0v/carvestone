@@ -64,6 +64,7 @@ okf_version: "0.2"
 
 # Plans
 
+- [Block store for stone items](plans/block-store.md) - Deferred design. Stone keeps items as compressed blocks in append-only chunks, with its own versioning, merge and graph.
 - [M-1 store and CLI requirements](plans/m1-store-cli.md) - What `stone` does at the end of M-1, as checkable behaviour. Serves CS-2 to CS-7.
 - [M-2 search requirements](plans/m2-search.md) - Section-level search, backlinks and the Backlog.md task importer, as checkable behaviour. Serves the M-2 task list.
 - [M-3 code graph and architecture requirements](plans/m3-code-graph.md) - Symbol extraction, per-language resolvers, code queries, modules, drift and scan, as checkable behaviour. Serves the M-3 task list.
@@ -94,6 +95,7 @@ okf_version: "0.2"
 - [M-17: First public release](milestones/M-17.md) - A stranger on any stack installs Stone, reads what it is in one line, and understands a product from its C4 diagrams. Done when the public repo is live, per ADR-16 to ADR-19.
 - [M-18: Agent-first read surface](milestones/M-18.md) - An agent gets the context of its task in one or two calls, and trusts the answer. Done when the three stages of ADR-21 are in place and measured.
 - [M-19: Code health after M-18](milestones/M-19.md)
+- [M-20: Store merges without conflicts](milestones/M-20.md)
 
 # Tasks
 
@@ -349,6 +351,7 @@ okf_version: "0.2"
 - [CS-269: Release 0.1.1](tasks/CS-269.md) - Version 0.1.0 -> 0.1.1. build/stone.exe rebuilt with the UI at 9715896. Tag v0.1.1 starts release.yml.
 - [CS-270: Contributors can use the Claude Code crew setup on any OS](tasks/CS-270.md) - A contributor who clones the repo gets the same crew setup as the owner, on Windows, Linux or macOS. Only personal preferences stay in local files.
 - [CS-271: Clear the stale warnings on prd.md and the 2 arch items](tasks/CS-271.md) - stone check tells the user to add a verified stamp, but no command writes one. stone edit <id> --verify --by <actor> appends the stamp, so a re-read item stops being stale without a new command. Then the 3 stale items…
+- [CS-272: Git merges of stone items resolve by paragraph, and stone resolve settles real conflicts](tasks/CS-272.md) - When git merges two branches that both changed a stone item, stone merges the item by paragraph and by front matter field, not by line. Only edits to the same paragraph or the same field stay a conflict.
 - [CS-273: The web bundle ships one elkjs copy](tasks/CS-273.md) - The web bundle ships elkjs once. Today mermaid pulls elkjs 0.9.3 next to our elkjs 0.12.0, so about 1.4 MB ships twice and lands in the binary too.
 - [CS-274: A size report shows what fills the release binary](tasks/CS-274.md) - The owner sees which crates fill the 26.7 MB release binary, so the next size cut targets the biggest one. Measurement only, no code change.
 - [CS-275: The embedded web UI is served pre-compressed](tasks/CS-275.md) - A release binary built with the web UI stores each embedded file compressed, so the 7.3 MB web/dist takes less space in the binary. The server still sends each file unchanged.

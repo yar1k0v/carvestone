@@ -1010,3 +1010,54 @@ pub fn uses_bullets(body: &str, first_line: usize) -> Vec<UsesBullet> {
     }
     out
 }
+
+/// Splits a body into merge units: a heading, a whole fence, or a paragraph. Each unit keeps
+/// the blank lines after it, so the units joined give `body` byte for byte.
+pub fn blocks(body: &str) -> Vec<&str> {
+    let lines = scan(body);
+    let blank = |l: &Line| !l.in_fence && l.text.trim().is_empty();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < lines.len() {
+        let first = i;
+        if lines[i].heading.is_some() {
+            i += 1;
+        } else if lines[i].opens {
+            while i < lines.len() && !lines[i].closes {
+                i += 1;
+            }
+            i = (i + 1).min(lines.len());
+        } else {
+            while i < lines.len() && !blank(&lines[i]) {
+                i += 1;
+            }
+        }
+        while i < lines.len() && blank(&lines[i]) {
+            i += 1;
+        }
+        let end = lines.get(i).map_or(body.len(), |l| l.start);
+        out.push(&body[lines[first].start..end]);
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::blocks;
+
+    #[test]
+    fn blocks_table() {
+        let rows: [(&str, &[&str]); 5] = [
+            ("", &[]),
+            ("# T\n\npara\n", &["# T\n\n", "para\n"]),
+            ("a\nb\n\n\nc\n", &["a\nb\n\n\n", "c\n"]),
+            ("```\nx\n\ny\n```\n\nafter\n", &["```\nx\n\ny\n```\n\n", "after\n"]),
+            ("# T\r\n\r\np\r\n\r\nq\r\n", &["# T\r\n\r\n", "p\r\n\r\n", "q\r\n"]),
+        ];
+        for (body, want) in rows {
+            let got = blocks(body);
+            assert_eq!(got, want, "units of {body:?}");
+            assert_eq!(got.concat(), body, "join of {body:?}");
+        }
+    }
+}

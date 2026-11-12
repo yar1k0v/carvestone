@@ -27,6 +27,7 @@ use carvestone_engine::edit::Edit;
 use carvestone_engine::fields::SetValue;
 use carvestone_engine::guide::{Topic, guide_text, unknown_topic};
 use carvestone_engine::history::{self, HistoryOpts};
+use carvestone_engine::merge;
 use carvestone_engine::precedents::{self, Lookup, Precedents};
 use carvestone_engine::project_map::ProjectMap;
 use carvestone_engine::query::{Backlink, GetResult, ListFilter, ListRow, libraries_note};
@@ -141,6 +142,17 @@ enum Command {
         /// Fail unless the message in FILE has a `Refs:` trailer (what the hook runs).
         #[arg(long, value_name = "FILE")]
         check: Option<PathBuf>,
+    },
+    /// Merge two versions of a stone item by paragraph and field; the git merge driver (`%O %A %B %P`).
+    MergeFile {
+        /// The common ancestor.
+        base: PathBuf,
+        /// Our version; the merged text is written here.
+        ours: PathBuf,
+        /// Their version.
+        theirs: PathBuf,
+        /// The item's path in the repository, for messages.
+        path: String,
     },
     /// Explain a file or line: the commits, tasks, plans and decisions behind it.
     Why {
@@ -901,6 +913,24 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         commit_msg::check_message(&String::from_utf8_lossy(&text))?;
         return Ok(ExitCode::SUCCESS);
     }
+    if let Command::MergeFile {
+        base,
+        ours,
+        theirs,
+        path,
+    } = &cli.command
+    {
+        // Git runs the driver in the middle of a merge, so it reads three files and opens no store.
+        let read = |file: &PathBuf| {
+            std::fs::read_to_string(file).map_err(|err| anyhow::anyhow!("cannot read {}: {err}", file.display()))
+        };
+        let merged = merge::merge_text(&read(base)?, &read(ours)?, &read(theirs)?);
+        std::fs::write(ours, &merged.text).map_err(|err| anyhow::anyhow!("cannot write {}: {err}", ours.display()))?;
+        if merged.conflicts == 0 {
+            return Ok(ExitCode::SUCCESS);
+        }
+        anyhow::bail!("{path}: {} conflicts", merged.conflicts);
+    }
     let start = match &cli.root {
         Some(root) => root.clone(),
         None => std::env::current_dir()?,
@@ -1283,7 +1313,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             let text = render_timeline(&events, more, cli.json)?;
             print!("{}", lean::fit_lines(if cli.json { None } else { budget }, &text));
         }
-        Command::Init { .. } | Command::Instructions { .. } => {}
+        Command::Init { .. } | Command::Instructions { .. } | Command::MergeFile { .. } => {}
     }
     Ok(ExitCode::SUCCESS)
 }

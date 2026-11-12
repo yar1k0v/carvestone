@@ -10,6 +10,7 @@ mod export;
 mod guide;
 mod history;
 mod items;
+mod merge;
 mod search;
 mod support;
 mod tasks;
