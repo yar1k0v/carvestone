@@ -283,6 +283,15 @@ fn the_session_hook_is_added_once_and_keeps_the_settings() {
         ordered
     );
 
+    // A CRLF file stays CRLF, and a second run leaves it byte for byte.
+    let crlf = format!(
+        "{{\r\n  \"env\": {{\r\n    \"A\": \"1\"\r\n  }},\r\n{}\r\n",
+        HOOK_TAIL.replace('\n', "\r\n")
+    );
+    let crlf_merged = session_hook::apply("{\r\n  \"env\": {\r\n    \"A\": \"1\"\r\n  }\r\n}\r\n").unwrap();
+    assert_eq!(crlf_merged, crlf);
+    assert_eq!(session_hook::apply(&crlf_merged).unwrap(), crlf_merged);
+
     // Another entry stays first; the stone one is added after it.
     let other = r#"{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo hi"}]}]}}"#;
     let merged = session_hook::apply(other).unwrap();

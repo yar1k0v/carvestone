@@ -1,7 +1,7 @@
 //! The Claude Code SessionStart hook that prints the project map at the start of each session.
 //!
 //! The hook lives in the user's `.claude/settings.json`, so the merge keeps every other key and
-//! the order of the file, and a second run writes nothing.
+//! the order of the file and its line endings (CRLF stays CRLF), and a second run writes nothing.
 
 use crate::repo::{EngineError, Repo};
 
@@ -41,6 +41,10 @@ pub fn apply(text: &str) -> Result<String, String> {
     }));
     let mut out = serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?;
     out.push('\n');
+    // The user's file keeps its line endings; the printed JSON has no `\r` of its own.
+    if text.contains("\r\n") {
+        out = out.replace('\n', "\r\n");
+    }
     Ok(out)
 }
 
