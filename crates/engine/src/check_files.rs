@@ -17,12 +17,14 @@ pub(crate) fn file_problems(store: &Store, snapshot: &Snapshot, out: &mut Vec<Pr
         .map(|e| (e.path.as_str(), e.text.as_str()))
         .chain(reserved.iter().map(|(p, t)| (p.as_str(), t.as_str())));
     for (path, text) in texts {
-        if let Some(line) = marker_line(text) {
+        for line in crate::merge::conflict_lines(text) {
             out.push(Problem::new(
                 path,
                 line,
                 "conflict",
-                "unresolved merge conflict; resolve it and remove the markers",
+                format!(
+                    "unresolved merge conflict: run `stone resolve {path} --take ours` or `--take theirs`, or edit the two versions into one"
+                ),
             ));
         }
     }
@@ -62,17 +64,4 @@ pub(crate) fn file_problems(store: &Store, snapshot: &Snapshot, out: &mut Vec<Pr
         ));
     }
     Ok(())
-}
-
-/// The 1-based line of the first merge marker: exactly seven `<` or `>`
-/// followed by a space or the end of the line.
-fn marker_line(text: &str) -> Option<usize> {
-    text.lines()
-        .position(|line| {
-            ["<<<<<<<", ">>>>>>>"].iter().any(|m| {
-                line.strip_prefix(m)
-                    .is_some_and(|rest| rest.is_empty() || rest.starts_with(' '))
-            })
-        })
-        .map(|i| i + 1)
 }

@@ -1,6 +1,8 @@
 //! Merging two edits of one stone item: by paragraph and by front matter field.
 
-use carvestone_engine::merge::merge_text;
+use carvestone_engine::merge::{Side, merge_text, take_side};
+
+use crate::support::Store;
 
 const FRONT: &str = "---\ntitle: T\nstatus: todo\nlinks: [a]\n---\n";
 
@@ -132,4 +134,48 @@ fn merge_is_identity() {
             assert_eq!(&merge_text(&base, side, &base).text, side, "{name}: base = theirs");
         }
     }
+}
+
+#[test]
+fn take_side_table() {
+    let one = "a\n<<<<<<< ours\nO\n=======\nT\n>>>>>>> theirs\nz\n";
+    let two = "<<<<<<< ours\n1\n=======\n2\n>>>>>>> theirs\nm\n<<<<<<< ours\n3\n=======\n4\n>>>>>>> theirs\n";
+    let crlf = "<<<<<<< ours\r\nO\r\n=======\r\nT\r\n>>>>>>> theirs\r\nz\r\n";
+    let fenced = "```\n<<<<<<< ours\n```\n";
+    let diff3 = "a\n<<<<<<< ours\nO\n||||||| base\nB\n=======\nT\n>>>>>>> theirs\nz\n";
+    let rows = [
+        ("ours", one, Side::Ours, Some("a\nO\nz\n")),
+        ("theirs", one, Side::Theirs, Some("a\nT\nz\n")),
+        ("two blocks", two, Side::Ours, Some("1\nm\n3\n")),
+        ("diff3 ours drops the base", diff3, Side::Ours, Some("a\nO\nz\n")),
+        ("diff3 theirs", diff3, Side::Theirs, Some("a\nT\nz\n")),
+        ("no markers", "a\nb\n", Side::Ours, None),
+        ("marker inside a fence", fenced, Side::Theirs, None),
+        ("CRLF kept", crlf, Side::Theirs, Some("T\r\nz\r\n")),
+    ];
+    for (name, text, side, want) in rows {
+        assert_eq!(take_side(text, side).as_deref(), want, "{name}");
+    }
+}
+
+#[test]
+fn check_reports_conflict() {
+    let store = Store::new();
+    let task = |body: &str| format!("---\ntitle: T\nstatus: todo\ncreated: 2026-11-01T09:00:00+00:00\n---\n{body}");
+    // The first marker sits in a fence, so only the second is a conflict.
+    let marked = "```\n<<<<<<< x\n```\n\n<<<<<<< ours\nA\n=======\nB\n>>>>>>> theirs\n";
+    store.write("stone/tasks/CS-1.md", &task(marked));
+    let conflicts = |store: &Store| -> Vec<(String, usize)> {
+        let problems = store.repo().check().unwrap();
+        problems
+            .iter()
+            .filter(|p| p.rule == "conflict")
+            .map(|p| (p.path.clone(), p.line))
+            .collect()
+    };
+    assert_eq!(conflicts(&store), [("stone/tasks/CS-1.md".to_string(), 10)]);
+
+    let resolved = take_side(&store.read("stone/tasks/CS-1.md"), Side::Theirs).unwrap();
+    store.write("stone/tasks/CS-1.md", &resolved);
+    assert_eq!(conflicts(&store), Vec::<(String, usize)>::new());
 }

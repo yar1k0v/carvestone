@@ -1041,6 +1041,11 @@ pub fn blocks(body: &str) -> Vec<&str> {
     out
 }
 
+/// For each line of `body`, whether it lies in a fenced block, fence lines included.
+pub fn fence_lines(body: &str) -> Vec<bool> {
+    scan(body).iter().map(|l| l.in_fence).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::blocks;

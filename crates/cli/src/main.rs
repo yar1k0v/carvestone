@@ -154,6 +154,14 @@ enum Command {
         /// The item's path in the repository, for messages.
         path: String,
     },
+    /// Settle every merge conflict of one file under stone/ by keeping one side.
+    Resolve {
+        /// The file, such as stone/tasks/CS-7.md.
+        path: String,
+        /// Which version to keep.
+        #[arg(long, value_enum)]
+        take: TakeSide,
+    },
     /// Explain a file or line: the commits, tasks, plans and decisions behind it.
     Why {
         /// `path` or `path:line`.
@@ -528,6 +536,12 @@ struct SearchArgs {
     /// Stop adding hits once the printed lines cost this many tokens (chars / 4).
     #[arg(long)]
     budget: Option<usize>,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum TakeSide {
+    Ours,
+    Theirs,
 }
 
 /// The C4 level `stone arch c4` draws.
@@ -1240,6 +1254,18 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         } => {
             let done = repo.remove_task(&id, dry_run)?;
             print!("{}", render_removed(&done, dry_run, cli.json)?);
+        }
+        Command::Resolve { path, take } => {
+            let side = match take {
+                TakeSide::Ours => merge::Side::Ours,
+                TakeSide::Theirs => merge::Side::Theirs,
+            };
+            let n = repo.resolve_conflicts(&path, side)?;
+            if cli.json {
+                println!("{}", serde_json::json!({ "path": path, "resolved": n }));
+            } else {
+                println!("resolved {n} conflicts in {path}");
+            }
         }
         Command::Renumber { path, dry_run } => {
             let done = repo.renumber(&path, dry_run)?;

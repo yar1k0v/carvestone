@@ -4,12 +4,13 @@
 
 use std::ops::Range;
 
-use carvestone_core::section::{blocks, eol};
+use carvestone_core::section::{blocks, eol, fence_lines};
 use carvestone_store::frontmatter::Document;
+use carvestone_store::write::write_atomic;
 use serde_norway::Value;
 use similar::{Algorithm, DiffOp, capture_diff_slices};
 
-use crate::repo::EngineError;
+use crate::repo::{EngineError, Repo};
 
 /// The merged file text and how many conflict blocks it holds.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -271,4 +272,98 @@ fn merge_body(base: &str, ours: &str, theirs: &str, line_end: &str) -> (String, 
         unpad(&mut out);
     }
     (out, conflicts)
+}
+
+/// Which version of a conflict `take_side` keeps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Side {
+    Ours,
+    Theirs,
+}
+
+/// Replaces every conflict block with the lines of one side. `None` when the text has no
+/// conflict block.
+pub fn take_side(text: &str, side: Side) -> Option<String> {
+    #[derive(PartialEq)]
+    enum In {
+        Text,
+        Ours,
+        /// The `|||||||` section of a diff3 conflict: the common ancestor, kept by neither side.
+        Base,
+        Theirs,
+    }
+    let fenced = fence_lines(text);
+    let (mut out, mut state, mut found) = (String::new(), In::Text, false);
+    for (n, line) in text.split_inclusive('\n').enumerate() {
+        let bare = line.trim_end_matches(['\r', '\n']);
+        match state {
+            In::Text if !fenced[n] && is_marker(bare, '<') => {
+                state = In::Ours;
+                found = true;
+            }
+            In::Text => out.push_str(line),
+            In::Ours if is_marker(bare, '|') => state = In::Base,
+            In::Ours if bare == "=======" => state = In::Theirs,
+            In::Base if bare == "=======" => state = In::Theirs,
+            In::Base => {}
+            In::Ours => {
+                if side == Side::Ours {
+                    out.push_str(line);
+                }
+            }
+            In::Theirs if is_marker(bare, '>') => state = In::Text,
+            In::Theirs => {
+                if side == Side::Theirs {
+                    out.push_str(line);
+                }
+            }
+        }
+    }
+    found.then_some(out)
+}
+
+/// The 1-based line of each conflict block's opening marker. A marker inside a fence is text.
+pub fn conflict_lines(text: &str) -> Vec<usize> {
+    let fenced = fence_lines(text);
+    text.lines()
+        .enumerate()
+        .filter(|(n, line)| !fenced[*n] && is_marker(line, '<'))
+        .map(|(n, _)| n + 1)
+        .collect()
+}
+
+/// Exactly seven `mark` characters, then a space or the end of the line.
+fn is_marker(line: &str, mark: char) -> bool {
+    let rest = line.trim_start_matches(mark);
+    line.len() - rest.len() == 7 && (rest.is_empty() || rest.starts_with(' '))
+}
+
+impl Repo {
+    /// Settles every conflict block of one file under `stone/` by keeping one side. Returns how
+    /// many blocks it settled.
+    pub fn resolve_conflicts(&self, path: &str, side: Side) -> Result<usize, EngineError> {
+        let root = &self.store.layout.root;
+        let given = std::path::Path::new(path);
+        let rel = given
+            .strip_prefix(root)
+            .unwrap_or(given)
+            .to_string_lossy()
+            .replace('\\', "/");
+        let rel = rel.trim_start_matches("./");
+        if !rel.starts_with("stone/") || rel.split('/').any(|part| part == "..") {
+            return Err(EngineError::Invalid(format!(
+                "{path} is outside stone/; stone resolve settles stone items only"
+            )));
+        }
+        let file = root.join(rel);
+        let _lock = self.store.lock()?;
+        let text =
+            std::fs::read_to_string(&file).map_err(|err| EngineError::Invalid(format!("cannot read {path}: {err}")))?;
+        let count = conflict_lines(&text).len();
+        let Some(settled) = take_side(&text, side) else {
+            return Err(EngineError::Invalid(format!("{path} has no conflict")));
+        };
+        write_atomic(&file, &settled)?;
+        Ok(count)
+    }
 }
