@@ -96,6 +96,11 @@ impl Git {
         }
     }
 
+    /// Sets a key in the repo's own git config; the same value twice changes nothing.
+    pub fn set_config(&self, key: &str, value: &str) -> Result<(), GitError> {
+        self.run(&["config", key, value]).map(|_| ())
+    }
+
     /// The short name of the branch HEAD points at; `None` on a detached HEAD.
     pub fn branch(&self) -> Result<Option<String>, GitError> {
         let out = self.exec(&["symbolic-ref", "--short", "-q", "HEAD"], None)?;

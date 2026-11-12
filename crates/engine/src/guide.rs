@@ -256,6 +256,7 @@ pub const CLI_NESTED: &[(&str, &str)] = &[
     ("task", "remove"),
     ("config", "add-code-root"),
     ("config", "add-scip-index"),
+    ("config", "merge-driver"),
 ];
 
 /// Tools of other servers the guide may name: the Docs MCP.

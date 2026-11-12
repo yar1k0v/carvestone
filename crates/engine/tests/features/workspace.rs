@@ -4,7 +4,7 @@ use carvestone_engine::EngineError;
 use carvestone_engine::code::{CodeQuery, find, outline, uses};
 use carvestone_engine::code_graph::impact;
 use carvestone_engine::code_native::{NativeQuery, native};
-use carvestone_engine::create::init;
+use carvestone_engine::create::{init, install_merge_driver};
 use carvestone_engine::product::feature;
 use carvestone_engine::search::Hit;
 use carvestone_engine::session_hook;
@@ -156,6 +156,23 @@ fn init_inside_a_repo_indexes_the_whole_repo() {
             .read("stone/config.yml")
             .ends_with("task_prefix: CS\ncode_roots:\n  - '.'\n")
     );
+    // Git routes stone items to the merge driver, and the driver names this binary.
+    assert!(
+        store
+            .read(".gitattributes")
+            .lines()
+            .any(|l| l == "stone/**/*.md merge=stone")
+    );
+    let driver = std::process::Command::new("git")
+        .args(["config", "--get", "merge.stone.driver"])
+        .current_dir(store.path(""))
+        .output()
+        .unwrap();
+    let driver = String::from_utf8(driver.stdout).unwrap();
+    assert!(driver.trim_end().ends_with("merge-file %O %A %B %P"), "{driver}");
+    // A second run adds nothing.
+    assert!(!install_merge_driver(&store.path("")).unwrap().attributes_added);
+    assert_eq!(store.read(".gitattributes").matches("merge=stone").count(), 1);
     let repo = store.repo();
     assert_eq!(
         lines(&find(&repo, &query("Player")).unwrap().hits),

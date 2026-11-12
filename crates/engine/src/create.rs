@@ -187,8 +187,45 @@ pub struct Initialised {
     pub stone_repo: StoneRepo,
     /// Lines added to the root `.gitignore`.
     pub ignored: Vec<String>,
+    /// The merge driver set up for stone items; only in a git repo.
+    pub merge_driver: Option<MergeDriver>,
     /// The languages found under the code roots, for the next steps `init` prints.
     pub langs: Vec<LangSetup>,
+}
+
+/// What `install_merge_driver` set up.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MergeDriver {
+    /// Whether the `.gitattributes` line was new.
+    pub attributes_added: bool,
+    /// The command git runs to merge a stone item.
+    pub command: String,
+}
+
+/// Routes `stone/**/*.md` to the stone merge driver in `.gitattributes` and names this binary as
+/// the driver in the repo's git config. Running it again changes nothing.
+pub fn install_merge_driver(root: &Path) -> Result<MergeDriver, EngineError> {
+    if !crate::repos::inside_repo(root) {
+        return Err(EngineError::Invalid(format!(
+            "{} is in no git repo, so there is no merge driver to set up; run `git init` first",
+            root.display()
+        )));
+    }
+    let exe = std::env::current_exe()
+        .map_err(|err| EngineError::Invalid(format!("cannot find the stone binary to name as merge driver: {err}")))?;
+    // Forward slashes, so the shell git runs the driver in does not eat the backslashes.
+    let command = format!(
+        "\"{}\" merge-file %O %A %B %P",
+        exe.display().to_string().replace('\\', "/")
+    );
+    let added = append_lines(&root.join(".gitattributes"), &["stone/**/*.md merge=stone"])?;
+    let git = carvestone_git::Git::new(root);
+    git.set_config("merge.stone.name", "stone item merge")?;
+    git.set_config("merge.stone.driver", &command)?;
+    Ok(MergeDriver {
+        attributes_added: !added.is_empty(),
+        command,
+    })
 }
 
 /// Direct subfolders of `root` that hold a `.git` (folder or file), sorted, as `name/`.
@@ -283,13 +320,15 @@ pub fn init_with(root: &Path, prefix: Option<&str>, done_needs_plan: bool) -> Re
     }
     // The ignore file is only a repo's business when the root is in that repo; a plain product folder has none to touch.
     let mut ignored = Vec::new();
+    let mut merge_driver = None;
     if in_repo {
         let mut wanted = vec!["/.stone/"];
         // The binary dropped next to the project is not source.
         if root.join("stone.exe").is_file() {
             wanted.push("stone.exe");
         }
-        ignored = ignore_lines(&root, &wanted)?;
+        ignored = append_lines(&root.join(".gitignore"), &wanted)?;
+        merge_driver = Some(install_merge_driver(&root)?);
     }
     // Last, so a failed init leaves no config and can be run again.
     write_atomic(&config_path, &config)?;
@@ -307,18 +346,19 @@ pub fn init_with(root: &Path, prefix: Option<&str>, done_needs_plan: bool) -> Re
         code_roots,
         stone_repo,
         ignored,
+        merge_driver,
         langs,
     })
 }
 
-/// Adds each of `wanted` to the root `.gitignore` unless a line already ignores it (a leading or
-/// trailing `/` does not matter); keeps the file's line ending. Returns the lines added.
-fn ignore_lines(root: &Path, wanted: &[&str]) -> Result<Vec<String>, StoreError> {
-    let path = root.join(".gitignore");
-    let text = match std::fs::read_to_string(&path) {
+/// Adds each of `wanted` to the line file at `path` (`.gitignore`, `.gitattributes`) unless a line
+/// already holds it (a leading or trailing `/` does not matter); keeps the file's line ending.
+/// Returns the lines added.
+fn append_lines(path: &Path, wanted: &[&str]) -> Result<Vec<String>, StoreError> {
+    let text = match std::fs::read_to_string(path) {
         Ok(text) => text,
         Err(e) if e.kind() == ErrorKind::NotFound => String::new(),
-        Err(e) => return Err(io_err(&path)(e)),
+        Err(e) => return Err(io_err(path)(e)),
     };
     let bare = |line: &str| line.trim().trim_matches('/').to_string();
     let present: Vec<String> = text.lines().map(bare).collect();
@@ -339,6 +379,6 @@ fn ignore_lines(root: &Path, wanted: &[&str]) -> Result<Vec<String>, StoreError>
         out.push_str(line);
         out.push_str(eol);
     }
-    write_atomic(&path, &out)?;
+    write_atomic(path, &out)?;
     Ok(added)
 }

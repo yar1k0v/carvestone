@@ -21,7 +21,7 @@ use carvestone_engine::code_entries::{self, Entries};
 use carvestone_engine::code_graph::{self, Explain, Impact, PathResult};
 use carvestone_engine::code_native::{self, IndexerRun, LangSetup, NativeQuery, NativeReport, NativeStep};
 use carvestone_engine::commit_msg::{self, HookState, UninstallState};
-use carvestone_engine::create::{Initialised, NewItem, StoneRepo, Written, init_with};
+use carvestone_engine::create::{Initialised, NewItem, StoneRepo, Written, init_with, install_merge_driver};
 use carvestone_engine::design;
 use carvestone_engine::edit::Edit;
 use carvestone_engine::fields::SetValue;
@@ -326,6 +326,8 @@ enum Command {
 
 #[derive(Subcommand)]
 enum ConfigCommand {
+    /// Set up the stone merge driver in a git repo: `.gitattributes` routes `stone/**/*.md` to it and git config names this binary.
+    MergeDriver,
     /// Add a folder to `code_roots`, such as `src` or `.` for the whole repo.
     AddCodeRoot {
         /// A folder inside the repo, relative to its root.
@@ -1135,6 +1137,22 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
                 for entry in &exported.unresolved {
                     eprintln!("warning: {entry} names no item; left as written");
                 }
+            }
+        }
+        Command::Config {
+            command: ConfigCommand::MergeDriver,
+        } => {
+            let done = install_merge_driver(&repo.store.layout.root)?;
+            if cli.json {
+                let value = serde_json::json!({
+                    "attributes_added": done.attributes_added,
+                    "driver": done.command,
+                });
+                println!("{}", serde_json::to_string_pretty(&value)?);
+            } else {
+                let state = if done.attributes_added { "added" } else { "present" };
+                println!(".gitattributes: stone/**/*.md merge=stone ({state})");
+                println!("driver: {}", done.command);
             }
         }
         Command::Config {
@@ -2463,6 +2481,7 @@ fn render_init(done: &Initialised, block: &BlockOffer, hook: &HookOffer, json: b
             "stone_repo": stone_repo,
             "stone_repo_skipped": skipped,
             "ignored": done.ignored,
+            "merge_driver": done.merge_driver.as_ref().map(|d| &d.command),
             "langs": done.langs,
             "agent_block": match block {
                 BlockOffer::Added(file) => serde_json::json!({ "state": "added", "file": file }),
@@ -2494,6 +2513,9 @@ fn render_init(done: &Initialised, block: &BlockOffer, hook: &HookOffer, json: b
     }
     if !done.ignored.is_empty() {
         out.push_str(&format!("added to .gitignore: {}\n", done.ignored.join(", ")));
+    }
+    if let Some(driver) = &done.merge_driver {
+        out.push_str(&format!("merge driver: {}\n", driver.command));
     }
     out.push_str(&next_steps(&done.langs));
     match block {
