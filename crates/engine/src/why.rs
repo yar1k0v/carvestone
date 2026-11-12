@@ -279,92 +279,8 @@ pub fn why(repo: &Repo, path: &str, line: Option<u32>, budget: Option<usize>) ->
     let index = repo.index()?;
     let conn = index.conn();
 
-    let mut commits = Vec::new();
-    if uncommitted {
-        commits.push(CommitRef {
-            sha: String::new(),
-            date: String::new(),
-            author: String::new(),
-            subject: "uncommitted change".to_string(),
-            uncommitted: true,
-        });
-    }
-    // ref id -> (trailer kind, commits that name it)
-    let mut named: BTreeMap<String, (String, BTreeSet<String>)> = BTreeMap::new();
-    for sha in &shas {
-        let row: Option<(String, String, String)> = conn
-            .query_row(
-                "SELECT date, author, subject FROM commits WHERE repo = ?1 AND sha = ?2",
-                params![one.dir(), sha],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-            )
-            .optional()?;
-        let Some((date, author, subject)) = row else {
-            continue;
-        };
-        commits.push(CommitRef {
-            sha: sha.clone(),
-            date,
-            author,
-            subject,
-            uncommitted: false,
-        });
-        let mut stmt =
-            conn.prepare_cached("SELECT ref_id, kind FROM commit_refs WHERE repo = ?1 AND sha = ?2 ORDER BY rowid")?;
-        let refs = stmt.query_map(params![one.dir(), sha], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })?;
-        for pair in refs {
-            let (ref_id, kind) = pair?;
-            named
-                .entry(ref_id)
-                .or_insert_with(|| (kind, BTreeSet::new()))
-                .1
-                .insert(sha.clone());
-        }
-    }
-
-    let mut lists = Lists::default();
-    let mut task_entries: Vec<&Entry> = Vec::new();
-    for (ref_id, (kind, by)) in named {
-        let count = by.len() as u32;
-        match find(&snapshot, &ref_id) {
-            Some(entry) => {
-                let rel = related(&snapshot, entry, "trailer", count);
-                match item_type(entry) {
-                    Some(ItemType::Task) => {
-                        task_entries.push(entry);
-                        lists.tasks.push(rel);
-                    }
-                    Some(ItemType::Plan) => lists.plans.push(rel),
-                    Some(ItemType::Decision) => lists.decisions.push(rel),
-                    _ => lists.docs.push(rel),
-                }
-            }
-            None => {
-                let rel = Related {
-                    id: ref_id,
-                    status: None,
-                    title: None,
-                    via: "trailer".to_string(),
-                    commits: count,
-                };
-                match kind.as_str() {
-                    "plan" => lists.plans.push(rel),
-                    "decision" => lists.decisions.push(rel),
-                    _ => lists.tasks.push(rel),
-                }
-            }
-        }
-    }
-    for list in [
-        &mut lists.tasks,
-        &mut lists.plans,
-        &mut lists.decisions,
-        &mut lists.docs,
-    ] {
-        list.sort_by(|a, b| b.commits.cmp(&a.commits).then_with(|| a.id.cmp(&b.id)));
-    }
+    let (commits, named) = commits_named(conn, one.dir(), &shas, uncommitted)?;
+    let (mut lists, mut task_entries) = trailer_lists(&snapshot, named);
 
     let mut problems = Vec::new();
     let owner = arch_elements(&snapshot, &mut problems)
@@ -426,6 +342,110 @@ pub fn why(repo: &Repo, path: &str, line: Option<u32>, budget: Option<usize>) ->
         result.fit(budget);
     }
     Ok(result)
+}
+
+/// Ref id -> (trailer kind, commits that name it).
+type Named = BTreeMap<String, (String, BTreeSet<String>)>;
+
+/// The commits that explain the file, an uncommitted change first, and the refs their trailers
+/// name.
+fn commits_named(
+    conn: &Connection,
+    dir: &str,
+    shas: &[String],
+    uncommitted: bool,
+) -> Result<(Vec<CommitRef>, Named), EngineError> {
+    let mut commits = Vec::new();
+    if uncommitted {
+        commits.push(CommitRef {
+            sha: String::new(),
+            date: String::new(),
+            author: String::new(),
+            subject: "uncommitted change".to_string(),
+            uncommitted: true,
+        });
+    }
+    let mut named = Named::new();
+    for sha in shas {
+        let row: Option<(String, String, String)> = conn
+            .query_row(
+                "SELECT date, author, subject FROM commits WHERE repo = ?1 AND sha = ?2",
+                params![dir, sha],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()?;
+        let Some((date, author, subject)) = row else {
+            continue;
+        };
+        commits.push(CommitRef {
+            sha: sha.clone(),
+            date,
+            author,
+            subject,
+            uncommitted: false,
+        });
+        let mut stmt =
+            conn.prepare_cached("SELECT ref_id, kind FROM commit_refs WHERE repo = ?1 AND sha = ?2 ORDER BY rowid")?;
+        let refs = stmt.query_map(params![dir, sha], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        for pair in refs {
+            let (ref_id, kind) = pair?;
+            named
+                .entry(ref_id)
+                .or_insert_with(|| (kind, BTreeSet::new()))
+                .1
+                .insert(sha.clone());
+        }
+    }
+    Ok((commits, named))
+}
+
+/// Sorts the named refs into lists: a ref the store knows goes to the list of its item type, and
+/// an unknown one goes to the list its trailer kind names. Also returns the task entries found.
+fn trailer_lists(snapshot: &Snapshot, named: Named) -> (Lists, Vec<&Entry>) {
+    let mut lists = Lists::default();
+    let mut task_entries: Vec<&Entry> = Vec::new();
+    for (ref_id, (kind, by)) in named {
+        let count = by.len() as u32;
+        match find(snapshot, &ref_id) {
+            Some(entry) => {
+                let rel = related(snapshot, entry, "trailer", count);
+                match item_type(entry) {
+                    Some(ItemType::Task) => {
+                        task_entries.push(entry);
+                        lists.tasks.push(rel);
+                    }
+                    Some(ItemType::Plan) => lists.plans.push(rel),
+                    Some(ItemType::Decision) => lists.decisions.push(rel),
+                    _ => lists.docs.push(rel),
+                }
+            }
+            None => {
+                let rel = Related {
+                    id: ref_id,
+                    status: None,
+                    title: None,
+                    via: "trailer".to_string(),
+                    commits: count,
+                };
+                match kind.as_str() {
+                    "plan" => lists.plans.push(rel),
+                    "decision" => lists.decisions.push(rel),
+                    _ => lists.tasks.push(rel),
+                }
+            }
+        }
+    }
+    for list in [
+        &mut lists.tasks,
+        &mut lists.plans,
+        &mut lists.decisions,
+        &mut lists.docs,
+    ] {
+        list.sort_by(|a, b| b.commits.cmp(&a.commits).then_with(|| a.id.cmp(&b.id)));
+    }
+    (lists, task_entries)
 }
 
 #[derive(Default)]

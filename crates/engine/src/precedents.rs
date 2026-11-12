@@ -214,14 +214,47 @@ pub fn precedents(repo: &Repo, lookup: &Lookup) -> Result<Precedents, EngineErro
     }
     let words = target.map(title_words).unwrap_or_default();
 
+    let mut hits = rank(&snapshot, &elements, &mut roles, &profile, by_words, &words, finished)?;
+    let limit = lookup.limit.unwrap_or(DEFAULT_LIMIT);
+    let omitted = hits.len().saturating_sub(limit);
+    let dropped: Vec<String> = hits
+        .split_off(hits.len().min(limit))
+        .iter()
+        .map(Precedent::line)
+        .collect();
+    let mut result = Precedents {
+        basis,
+        fallback: by_words.then(|| "words".to_string()),
+        hits,
+        truncated: omitted > 0,
+        omitted,
+        left_out: tiers::left_out("precedents", &dropped),
+    };
+    if let Some(budget) = lookup.budget {
+        result.fit(budget, dropped);
+    }
+    Ok(result)
+}
+
+/// The finished tasks that share points (or title words, with `by_words`) with the profile, best
+/// first.
+fn rank(
+    snapshot: &Snapshot,
+    elements: &[Element],
+    roles: &mut Roles<'_>,
+    profile: &Profile,
+    by_words: bool,
+    words: &BTreeSet<String>,
+    finished: Vec<(&Entry, Vec<(char, String)>)>,
+) -> Result<Vec<Precedent>, EngineError> {
     let mut ranked: Vec<(u32, usize, u32, Precedent)> = Vec::new();
     for (entry, files) in finished {
-        let theirs = profile_of(&files, &elements, &mut roles)?;
+        let theirs = profile_of(&files, elements, roles)?;
         let shared_words: Vec<String> = words.intersection(&title_words(entry)).cloned().collect();
         let (points, mut matched) = if by_words {
             (0, Vec::new())
         } else {
-            score(&profile, &theirs)
+            score(profile, &theirs)
         };
         let keep = if by_words { !shared_words.is_empty() } else { points > 0 };
         if !keep {
@@ -256,27 +289,7 @@ pub fn precedents(repo: &Repo, lookup: &Lookup) -> Result<Precedents, EngineErro
     ranked.sort_by(|a, b| {
         (Reverse(a.0), Reverse(a.1), Reverse(a.2), &a.3.id).cmp(&(Reverse(b.0), Reverse(b.1), Reverse(b.2), &b.3.id))
     });
-
-    let limit = lookup.limit.unwrap_or(DEFAULT_LIMIT);
-    let omitted = ranked.len().saturating_sub(limit);
-    let mut hits: Vec<Precedent> = ranked.into_iter().map(|(_, _, _, p)| p).collect();
-    let dropped: Vec<String> = hits
-        .split_off(hits.len().min(limit))
-        .iter()
-        .map(Precedent::line)
-        .collect();
-    let mut result = Precedents {
-        basis,
-        fallback: by_words.then(|| "words".to_string()),
-        hits,
-        truncated: omitted > 0,
-        omitted,
-        left_out: tiers::left_out("precedents", &dropped),
-    };
-    if let Some(budget) = lookup.budget {
-        result.fit(budget, dropped);
-    }
-    Ok(result)
+    Ok(ranked.into_iter().map(|(_, _, _, p)| p).collect())
 }
 
 pub(crate) fn is_task(entry: &Entry) -> bool {

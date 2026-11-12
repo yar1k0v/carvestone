@@ -133,8 +133,29 @@ pub fn fit(parts: &[Part], budget: Option<usize>) -> Fitted {
     let short = cost(&notice(&[], dropped_lines, dropped_tokens));
     let named = critical + long <= limit;
     let reserved = if named { long } else { short };
-    let mut room = limit.saturating_sub(critical + reserved);
+    let room = limit.saturating_sub(critical + reserved);
 
+    let kept = share_room(parts, room);
+    let left_out: Vec<LeftOut> = parts
+        .iter()
+        .zip(&kept)
+        .filter_map(|(part, keep)| left_out(&part.name, &part.lines[*keep..]))
+        .collect();
+    let cut_names: Vec<&str> = left_out.iter().map(|out| out.name.as_str()).collect();
+    let cut_lines: usize = left_out.iter().map(|out| out.lines).sum();
+    let cut_tokens: usize = left_out.iter().map(|out| out.tokens).sum();
+    let line = notice(if named { &cut_names } else { &[] }, cut_lines, cut_tokens);
+    let text = if left_out.is_empty() {
+        render(parts, &kept, None)
+    } else {
+        render(parts, &kept, Some(&line))
+    };
+    Fitted { text, left_out }
+}
+
+/// Rule R5: the optional parts, smallest first, each keep the longest prefix of lines that fits
+/// an equal share of what is left. Returns how many lines of each part stay.
+fn share_room(parts: &[Part], mut room: usize) -> Vec<usize> {
     let mut order: Vec<usize> = parts
         .iter()
         .enumerate()
@@ -142,7 +163,7 @@ pub fn fit(parts: &[Part], budget: Option<usize>) -> Fitted {
         .map(|(at, _)| at)
         .collect();
     order.sort_by_key(|&at| (part_cost(&parts[at]), at));
-    let mut kept = whole.clone();
+    let mut kept: Vec<usize> = parts.iter().map(|part| part.lines.len()).collect();
     for (handled, &at) in order.iter().enumerate() {
         let part = &parts[at];
         let share = room / (order.len() - handled);
@@ -163,30 +184,7 @@ pub fn fit(parts: &[Part], budget: Option<usize>) -> Fitted {
         kept[at] = lines;
         room -= spend;
     }
-
-    let left_out: Vec<LeftOut> = parts
-        .iter()
-        .zip(&kept)
-        .filter(|(part, keep)| **keep < part.lines.len())
-        .map(|(part, keep)| {
-            let dropped = &part.lines[*keep..];
-            LeftOut {
-                name: part.name.clone(),
-                lines: dropped.len(),
-                tokens: tokens(&dropped.join("\n")),
-            }
-        })
-        .collect();
-    let cut_names: Vec<&str> = left_out.iter().map(|out| out.name.as_str()).collect();
-    let cut_lines: usize = left_out.iter().map(|out| out.lines).sum();
-    let cut_tokens: usize = left_out.iter().map(|out| out.tokens).sum();
-    let line = notice(if named { &cut_names } else { &[] }, cut_lines, cut_tokens);
-    let text = if left_out.is_empty() {
-        render(parts, &kept, None)
-    } else {
-        render(parts, &kept, Some(&line))
-    };
-    Fitted { text, left_out }
+    kept
 }
 
 /// One printed line's cost: its characters plus the newline that ends it.
