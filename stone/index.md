@@ -348,3 +348,4 @@ okf_version: "0.2"
 - [CS-268: stone check names the command that clears its index warning](tasks/CS-268.md) - No fix task needed: every index warning stone check prints already names the command that clears it.
 - [CS-269: Release 0.1.1](tasks/CS-269.md) - Version 0.1.0 -> 0.1.1. build/stone.exe rebuilt with the UI at 9715896. Tag v0.1.1 starts release.yml.
 - [CS-270: Contributors can use the Claude Code crew setup on any OS](tasks/CS-270.md) - A contributor who clones the repo gets the same crew setup as the owner, on Windows, Linux or macOS. Only personal preferences stay in local files.
+- [CS-271: Clear the stale warnings on prd.md and the 2 arch items](tasks/CS-271.md) - stone check tells the user to add a verified stamp, but no command writes one. stone edit <id> --verify --by <actor> appends the stamp, so a re-read item stops being stale without a new command. Then the 3 stale items…

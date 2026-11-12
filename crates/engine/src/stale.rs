@@ -40,7 +40,7 @@ pub struct Stale {
 }
 
 /// Whether `stale` applies to this type at all.
-fn can_be_stale(ty: Option<ItemType>) -> bool {
+pub(crate) fn can_be_stale(ty: Option<ItemType>) -> bool {
     matches!(
         ty,
         Some(ItemType::Doc | ItemType::Reference | ItemType::System | ItemType::Container | ItemType::Component)
@@ -341,17 +341,13 @@ fn find(
         for c in candidates {
             let commits = touches.count(c.since, &c.globs);
             if commits >= threshold {
-                found.push((
-                    c.id,
-                    Stale {
-                        reason: format!(
-                            "{commits} commits changed its code since it was {} on {}; re-read it and add a `verified` stamp",
-                            c.label,
-                            c.since.iso()
-                        ),
-                        commits,
-                    },
-                ));
+                let reason = format!(
+                    "{commits} commits changed its code since it was {} on {}; re-read it and update it or run `stone edit {} --verify --by <you>`",
+                    c.label,
+                    c.since.iso(),
+                    c.id
+                );
+                found.push((c.id, Stale { reason, commits }));
             }
         }
         for n in named {
@@ -370,9 +366,12 @@ fn find(
                 n => format!("{first} and {} more files it names", n - 1),
             };
             let next = if n.plain {
-                "re-read it and update it"
+                "re-read it and update it".to_string()
             } else {
-                "re-read it and update it or add a `verified` stamp"
+                format!(
+                    "re-read it and update it or run `stone edit {} --verify --by <you>`",
+                    n.id
+                )
             };
             let word = if commits == 1 { "commit" } else { "commits" };
             found.push((

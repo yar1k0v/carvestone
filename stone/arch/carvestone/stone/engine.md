@@ -8,13 +8,14 @@ code: ['crates/engine/**']
 uses: [arch/carvestone/stone/core, arch/carvestone/stone/store, arch/carvestone/stone/search-index, arch/carvestone/stone/graph, arch/carvestone/stone/git]
 parent: arch/carvestone/stone
 created: 2026-10-25
-generated: { by: claude-code, at: 2026-11-05 }
+generated: { by: claude-code, at: '2026-11-12T16:48:11+00:00' }
 libraries: [ts-rs@12]
+verified: [{ by: claude-code, at: '2026-11-12T16:48:12+00:00' }]
 ---
 
 ## Responsibilities
 
-Holds every operation on a repo: items, tasks, checks, search, the code graph and its answers, design views, git history, imports and multi-repo workspaces.
+Holds every operation on a repo: items, tasks and their briefs, checks, search, the code graph and its answers, design views, git history, imports and multi-repo workspaces. It also builds the session map, writes `stone/index.md` and writes the OKF export.
 
 ## Interfaces
 

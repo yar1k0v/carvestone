@@ -467,6 +467,12 @@ struct EditArgs {
     /// Set the status to in-progress although the ready check finds gaps.
     #[arg(long)]
     force: bool,
+    /// Add a `verified` stamp: you re-read the item and it still holds. Needs --by.
+    #[arg(long, requires = "by")]
+    verify: bool,
+    /// Who verified: `human:<id>`, `process:<id>` or a producer name such as claude-code.
+    #[arg(long, requires = "verify", value_name = "ACTOR")]
+    by: Option<String>,
 }
 
 #[derive(Args)]
@@ -1066,6 +1072,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
                 check_ac: args.check_ac,
                 note: args.note,
                 force: args.force,
+                verify: args.by.filter(|_| args.verify),
             };
             show(
                 &repo.edit(&args.id, &req, args.dry_run)?,

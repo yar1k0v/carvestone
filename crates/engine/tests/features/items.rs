@@ -336,6 +336,69 @@ fn a_removed_section_leaves_every_other_byte() {
 }
 
 #[test]
+fn a_verify_appends_one_stamp_and_touches_nothing_else() {
+    const COMPONENT: &str =
+        "---\ntype: component\ntitle: Handlers\ncode: [src/handlers.rs]\n---\n\n## Responsibilities\n\nServe.\n";
+    const DOC: &str =
+        "---\ntype: doc\ntitle: Guide\nverified: { by: human:old, at: 2026-01-02 }\n---\n\n# Guide\n\nText.\n";
+    let verify = |by: &str| Edit {
+        verify: Some(by.into()),
+        ..Edit::default()
+    };
+    let store = Store::new();
+    let repo = store.repo();
+    store.write("stone/arch/shop/handlers.md", COMPONENT);
+    store.write("stone/docs/guide.md", DOC);
+    store.write("stone/tasks/CS-1.md", BARE);
+
+    // (a) no stamp yet: a one-entry list; the body and `generated` do not move.
+    repo.edit("arch/shop/handlers", &verify("claude-code"), false).unwrap();
+    let after = store.read("stone/arch/shop/handlers.md");
+    let line = after.lines().find(|l| l.starts_with("verified:")).unwrap();
+    assert!(
+        line.starts_with("verified: [") && line.matches("by:").count() == 1,
+        "{line}"
+    );
+    assert!(line.contains("claude-code"), "{line}");
+    assert!(!after.contains("generated:"), "{after}");
+    assert!(after.ends_with("\n## Responsibilities\n\nServe.\n"), "{after}");
+
+    // (b) a single old map: the old stamp stays, the new one follows it.
+    repo.edit("docs/guide", &verify("human:new"), false).unwrap();
+    let after = store.read("stone/docs/guide.md");
+    let line = after.lines().find(|l| l.starts_with("verified:")).unwrap();
+    assert!(line.matches("by:").count() == 2, "{line}");
+    assert!(
+        line.find("human:old").unwrap() < line.find("human:new").unwrap(),
+        "{line}"
+    );
+    assert!(line.contains("2026-01-02"), "{line}");
+
+    // (e) the same verify again adds another entry: stamps are a log.
+    repo.edit("docs/guide", &verify("human:new"), false).unwrap();
+    let line = store.read("stone/docs/guide.md");
+    let line = line.lines().find(|l| l.starts_with("verified:")).unwrap().to_string();
+    assert_eq!(line.matches("by:").count(), 3, "{line}");
+
+    // (c) a bad actor and (d) a task are refused, and nothing is written.
+    let before = store.read("stone/tasks/CS-1.md");
+    let err = repo
+        .edit("arch/shop/handlers", &verify("nobody here"), false)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("cannot stamp as `nobody here`") && err.contains("--by human:<id>"),
+        "{err}"
+    );
+    let err = repo.edit("CS-1", &verify("human:x"), false).unwrap_err().to_string();
+    assert!(
+        err.contains("is a task; only docs, references and architecture items take a verified stamp"),
+        "{err}"
+    );
+    assert_eq!(store.read("stone/tasks/CS-1.md"), before);
+}
+
+#[test]
 fn a_section_edit_refuses_to_drop_nested_sections() {
     // Top holds One (with Deep) and Two, so replacing any of them drops the headings below.
     const NESTED: &str =

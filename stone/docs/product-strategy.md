@@ -3,7 +3,7 @@ type: doc
 title: Product strategy
 status: draft
 created: 2026-11-12T12:35:12+00:00
-generated: { by: claude-code, at: '2026-11-12T14:38:24+00:00' }
+generated: { by: claude-code, at: '2026-11-12T16:44:58+00:00' }
 description: 'What Stone works on next and why: five bets, the gap checklist with links, and the order of work.'
 links: [ADR-21, docs/feature-agent-surface, M-18, M-19]
 ---
@@ -526,3 +526,7 @@ Decision proposed to the owner: Stone owns the whole task loop, and proves it ou
 - Which task holds the check-script follow-up (A7)? Owner.
 - Does bet 2 make Stone a task runner, and is that the product? Owner.
 - Can an agent report its own request and token counts, or does the host have to? Lead, before bet 5.
+
+## Notes
+
+- 2026-11-12: Owner rule (2026-11-12): no new top-level stone commands. New behavior goes into an existing command as a flag; a new command needs the owner's approval. Ceiling: 29 commands.

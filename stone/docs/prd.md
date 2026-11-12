@@ -4,6 +4,7 @@ title: PRD
 description: 'Historic requirements from October 2026. Current docs: docs/product-overview.'
 status: deprecated
 generated: { by: claude-code, at: 2026-11-11 }
+verified: [{ by: claude-code, at: '2026-11-12T16:48:12+00:00' }]
 ---
 
 # Carvestone — PRD

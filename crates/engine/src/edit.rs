@@ -1,6 +1,6 @@
 //! Changing items: `edit`, and the locked read-modify-write every writer shares.
 
-use carvestone_core::{ItemType, Section, check_box, remove_section, section_text, sections, set_section};
+use carvestone_core::{Actor, ItemType, Section, check_box, remove_section, section_text, sections, set_section};
 use carvestone_store::store::item_from_document;
 use carvestone_store::{Document, Entry, StoreError};
 
@@ -11,6 +11,8 @@ use crate::query::etag_of;
 use crate::ready;
 use crate::repo::{EngineError, Repo};
 use crate::resolve::Snapshot;
+use crate::stale::can_be_stale;
+use serde_norway::Value;
 
 /// What `stone edit` was asked to change. `section` is a name and its new text.
 #[derive(Debug, Clone, Default)]
@@ -28,6 +30,8 @@ pub struct Edit {
     pub note: Option<String>,
     /// Set a task to in-progress although the ready check finds gaps.
     pub force: bool,
+    /// Append a `verified` stamp by this actor: the item was re-read and still holds.
+    pub verify: Option<String>,
 }
 
 /// The item's type, or a pointer to `stone check` when the file has none that is known.
@@ -285,9 +289,10 @@ impl Repo {
             && req.remove_section.is_none()
             && req.check_ac.is_empty()
             && req.note.is_none()
+            && req.verify.is_none()
         {
             return Err(EngineError::Invalid(
-                "nothing to change; pass --set, --unset, --section, --remove-section or --check-ac".into(),
+                "nothing to change; pass --set, --unset, --section, --remove-section, --check-ac or --verify".into(),
             ));
         }
         if req.section.is_some() && req.remove_section.is_some() {
@@ -343,6 +348,28 @@ impl Repo {
             }
             if let Some(text) = &req.note {
                 doc.body = add_note(&doc.body, text, &today())?;
+            }
+            if let Some(by) = &req.verify {
+                if !can_be_stale(Some(ty)) {
+                    return Err(EngineError::Invalid(format!(
+                        "{} is a {}; only docs, references and architecture items take a verified stamp",
+                        snapshot.label(entry),
+                        ty.as_str()
+                    )));
+                }
+                if let Err(e) = by.parse::<Actor>() {
+                    return Err(EngineError::Invalid(format!(
+                        "cannot stamp as `{by}`: {e}; pass --by human:<id>, process:<id> or a producer name such as claude-code"
+                    )));
+                }
+                // The old stamps stay as they are; a bare map becomes the first entry of a list.
+                let mut stamps: Vec<Value> = doc
+                    .get_stamps("verified")?
+                    .iter()
+                    .map(|s| stamp_value(&s.by, &s.at))
+                    .collect();
+                stamps.push(stamp_value(by, &now()));
+                doc.set("verified", Value::Sequence(stamps))?;
             }
             if ty == ItemType::Task {
                 sync_closed(&ctx, doc, was.as_deref())?;
