@@ -35,6 +35,13 @@ fn section(name: &str, text: &str) -> Edit {
     }
 }
 
+fn remove(name: &str) -> Edit {
+    Edit {
+        remove_section: Some(name.into()),
+        ..Edit::default()
+    }
+}
+
 /// The text without its `generated:` line, whose date changes every day.
 fn unstamped(text: &str) -> String {
     text.split_inclusive('\n')
@@ -272,6 +279,60 @@ fn the_section_body_edits_the_text_before_the_first_heading() {
             .unwrap()
             .changed
     );
+}
+
+#[test]
+fn a_removed_section_leaves_every_other_byte() {
+    const LF: &str = "---\ntype: task\ntitle: Cut\nstatus: todo\n---\n\nIntro.\n\n## Description\n\nText.\n\n## Plan\n\n1. Step.\n\n### Detail\n\nMore.\n\n## Notes\n\nlast\n";
+    let rows: [(&str, &str, &str, &str); 6] = [
+        (
+            "a middle section and its sub-section",
+            LF,
+            "Plan",
+            "---\ntype: task\ntitle: Cut\nstatus: todo\n---\n\nIntro.\n\n## Description\n\nText.\n\n## Notes\n\nlast\n",
+        ),
+        (
+            "a sub-section only",
+            LF,
+            "Detail",
+            "---\ntype: task\ntitle: Cut\nstatus: todo\n---\n\nIntro.\n\n## Description\n\nText.\n\n## Plan\n\n1. Step.\n\n## Notes\n\nlast\n",
+        ),
+        (
+            "the last section, lower case",
+            LF,
+            "notes",
+            "---\ntype: task\ntitle: Cut\nstatus: todo\n---\n\nIntro.\n\n## Description\n\nText.\n\n## Plan\n\n1. Step.\n\n### Detail\n\nMore.\n",
+        ),
+        (
+            "the first section, upper case, the text above stays",
+            LF,
+            "DESCRIPTION",
+            "---\ntype: task\ntitle: Cut\nstatus: todo\n---\n\nIntro.\n\n## Plan\n\n1. Step.\n\n### Detail\n\nMore.\n\n## Notes\n\nlast\n",
+        ),
+        (
+            "CRLF, the first section",
+            TASK,
+            "Description",
+            "---\r\ntype: task\r\ntitle: First\r\nstatus: todo\r\npriority: high\r\n---\r\n\r\n## Notes\r\n\r\nlast\r\n",
+        ),
+        (
+            "CRLF, the last section",
+            TASK,
+            "Notes",
+            "---\r\ntype: task\r\ntitle: First\r\nstatus: todo\r\npriority: high\r\n---\r\n\r\n## Description\r\n\r\nText.\r\n",
+        ),
+    ];
+    for (what, file, name, want) in rows {
+        let store = Store::new();
+        let repo = store.repo();
+        store.write("stone/tasks/CS-1.md", file);
+        repo.edit("CS-1", &remove(name), false).unwrap();
+        let written = store.read("stone/tasks/CS-1.md");
+        assert_eq!(unstamped(&written), want, "{what}");
+        let err = repo.edit("CS-1", &remove(name), false).unwrap_err().to_string();
+        assert!(err.contains("has no section"), "{what}: {err}");
+        assert_eq!(store.read("stone/tasks/CS-1.md"), written, "{what}: a second write");
+    }
 }
 
 #[test]
@@ -519,7 +580,26 @@ fn errors() {
     let store = Store::new();
     store.write("stone/tasks/CS-1.md", BARE);
     let repo = store.repo();
-    let cases: [(&str, EngineError, &str); 24] = [
+    let cases: [(&str, EngineError, &str); 26] = [
+        (
+            "remove a missing section",
+            repo.edit("CS-1", &remove("Plan"), false).unwrap_err(),
+            "CS-1 has no section `Plan`; run `stone get CS-1` to see its sections",
+        ),
+        (
+            "replace and remove at once",
+            repo.edit(
+                "CS-1",
+                &Edit {
+                    section: Some(("Notes".into(), "n".into())),
+                    remove_section: Some("Plan".into()),
+                    ..Edit::default()
+                },
+                false,
+            )
+            .unwrap_err(),
+            "pass either --section or --remove-section, not both",
+        ),
         (
             "bad type",
             repo.create(&new("bogus", "x", None), false).unwrap_err(),

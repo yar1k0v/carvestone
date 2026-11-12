@@ -64,6 +64,7 @@ pub(crate) async fn patch_item(
         unset: body.unset,
         section: body.section.map(|s| (s.name, s.text)),
         replace_nested: body.replace_nested,
+        remove_section: body.remove_section,
         check_ac: body.check_ac.into_iter().collect(),
         note: body.note,
         force: body.force,

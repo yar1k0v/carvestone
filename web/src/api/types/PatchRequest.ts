@@ -11,6 +11,10 @@ export type PatchRequest = { set?: { [key in string]: FieldValue }, unset?: Arra
  */
 replace_nested?: boolean, 
 /**
+ * A section to remove, with everything under it.
+ */
+remove_section?: string, 
+/**
  * The 1-based checkbox of `## Acceptance criteria` to tick.
  */
 check_ac?: number, 

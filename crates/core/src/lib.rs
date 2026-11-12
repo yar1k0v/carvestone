@@ -16,5 +16,5 @@ pub use item::{
 pub use section::{
     C4Box, C4Rel, Checkbox, Diagram, Fact, Link, Section, USES_MAX_WORDS, UsesBullet, body_links, c4_parts, check_box,
     checkboxes, code_span_ranges, diagrams, doc_facts, eol, first_paragraph, lines, links, md_links, plain_text,
-    section_text, sections, set_section, slug, uses_bullets, wiki_links,
+    remove_section, section_text, sections, set_section, slug, uses_bullets, wiki_links,
 };

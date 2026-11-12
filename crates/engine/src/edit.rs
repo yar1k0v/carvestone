@@ -1,6 +1,6 @@
 //! Changing items: `edit`, and the locked read-modify-write every writer shares.
 
-use carvestone_core::{ItemType, Section, check_box, section_text, sections, set_section};
+use carvestone_core::{ItemType, Section, check_box, remove_section, section_text, sections, set_section};
 use carvestone_store::store::item_from_document;
 use carvestone_store::{Document, Entry, StoreError};
 
@@ -20,6 +20,8 @@ pub struct Edit {
     pub section: Option<(String, String)>,
     /// Replace the section although it holds sub-sections the new text does not carry.
     pub replace_nested: bool,
+    /// A section to remove, with everything under it.
+    pub remove_section: Option<String>,
     /// The 1-based checkboxes of `## Acceptance criteria` to tick.
     pub check_ac: Vec<usize>,
     /// One line to add under `## Notes`, dated today.
@@ -280,11 +282,17 @@ impl Repo {
         if req.set.is_empty()
             && req.unset.is_empty()
             && req.section.is_none()
+            && req.remove_section.is_none()
             && req.check_ac.is_empty()
             && req.note.is_none()
         {
             return Err(EngineError::Invalid(
-                "nothing to change; pass --set, --unset, --section or --check-ac".into(),
+                "nothing to change; pass --set, --unset, --section, --remove-section or --check-ac".into(),
+            ));
+        }
+        if req.section.is_some() && req.remove_section.is_some() {
+            return Err(EngineError::Invalid(
+                "pass either --section or --remove-section, not both".into(),
             ));
         }
         self.update_if(input, dry_run, if_match, |snapshot, entry, doc| {
@@ -320,6 +328,15 @@ impl Repo {
                     )));
                 }
                 doc.body = replace_section(&doc.body, name, text);
+            }
+            if let Some(name) = &req.remove_section {
+                doc.body = remove_section(&doc.body, name).ok_or_else(|| {
+                    let id = snapshot.label(entry);
+                    EngineError::Invalid(format!(
+                        "{id} has no section `{}`; run `stone get {id}` to see its sections",
+                        name.trim()
+                    ))
+                })?;
             }
             for &n in &req.check_ac {
                 doc.body = check_box(&doc.body, "Acceptance criteria", n)?;

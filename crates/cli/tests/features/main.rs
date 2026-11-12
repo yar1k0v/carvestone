@@ -136,6 +136,17 @@ fn every_command_answers_on_a_small_store() {
                 "updated CS-1",
             ),
             (
+                &["edit", "CS-1", "--section", "scratch", "--text", "s"],
+                0,
+                "updated CS-1",
+            ),
+            (&["edit", "CS-1", "--remove-section", "scratch"], 0, "updated CS-1"),
+            (
+                &["edit", "CS-1", "--remove-section", "scratch"],
+                1,
+                "✗ CS-1 has no section `scratch`; run `stone get CS-1` to see its sections",
+            ),
+            (
                 &[
                     "edit",
                     "CS-1",

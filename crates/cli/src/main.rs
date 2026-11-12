@@ -449,6 +449,9 @@ struct EditArgs {
     section: Option<String>,
     #[arg(long, requires = "section", allow_hyphen_values = true)]
     text: Option<String>,
+    /// Remove this section with everything under it, sub-sections included.
+    #[arg(long, conflicts_with_all = ["section", "replace_nested"])]
+    remove_section: Option<String>,
     /// Tick the Nth checkbox under Acceptance criteria; repeat for more.
     #[arg(long)]
     check_ac: Vec<usize>,
@@ -1059,6 +1062,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
                 unset: args.unset,
                 section,
                 replace_nested: args.replace_nested,
+                remove_section: args.remove_section,
                 check_ac: args.check_ac,
                 note: args.note,
                 force: args.force,

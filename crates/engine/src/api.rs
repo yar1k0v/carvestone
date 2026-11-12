@@ -94,6 +94,9 @@ pub struct PatchRequest {
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub replace_nested: bool,
+    /// A section to remove, with everything under it.
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub remove_section: Option<String>,
     /// The 1-based checkbox of `## Acceptance criteria` to tick.
     #[cfg_attr(feature = "ts", ts(optional))]
     pub check_ac: Option<usize>,

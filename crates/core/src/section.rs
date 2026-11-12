@@ -224,6 +224,26 @@ pub fn set_section(body: &str, name: &str, text: &str) -> String {
     out
 }
 
+/// Removes the named section: its heading and everything under it, sub-sections included.
+/// Every other byte stays. `None` when the body has no such section.
+pub fn remove_section(body: &str, name: &str) -> Option<String> {
+    let secs = sections(body, 1);
+    let s = find(&secs, name)?;
+    let lines = scan(body);
+    let start = lines[s.start_line - 1].start;
+    let end = lines.get(s.end_line).map_or(body.len(), |l| l.start);
+    if end < body.len() {
+        return Some(format!("{}{}", &body[..start], &body[end..]));
+    }
+    // The last section: the blank line that parted it from the one above goes too.
+    let kept = body[..start].trim_end_matches(['\r', '\n']);
+    Some(if kept.is_empty() {
+        String::new()
+    } else {
+        format!("{kept}{}", eol(body))
+    })
+}
+
 /// One `- [ ]` / `- [x]` line of a section, numbered from 1 in the order
 /// `check_box` counts them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
