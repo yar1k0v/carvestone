@@ -24,7 +24,7 @@ Use `edit <id>` with `--set` for fields, and `--section <name>` for sections.
 | Part | What it holds |
 |---|---|
 | `description` | 1–3 lines: what changes, for whom |
-| `acceptance-criteria` | ``- [ ] `<command>` → <output that passes>``, narrowest crate first. Test filters state `N passed` |
+| `acceptance-criteria` | ``- [ ] `<command>` → <output that passes>``, narrowest crate first. Test filters state `N passed`. No clippy, fmt or full-check rows: rust-analyzer covers compile and lint, and the full checks run once at the end |
 | `plan` | Numbered steps, one action each. Name `path#Symbol`, never line numbers. For each seam: what it catches, what it misses, and the test choice (patch, add or none). A file or symbol the task adds carries `(new)` after its code span. An example path in a step is written without the hash form, or it is read as a target. |
 | `components`, `paths` | Both are required. `paths` lists every file allowed to change |
 | tag | `size-s` (up to 15 Developer requests) or `size-m` (up to 30). Bigger: propose a split to the owner, and create nothing |

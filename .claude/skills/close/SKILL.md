@@ -6,7 +6,7 @@ argument-hint: "[task-id]"
 
 # close (Developer)
 
-1. Only after check reported every criterion with evidence.
+1. Only after check reported every criterion with evidence. Code changed: run `bash scripts/check.sh fmt cargo fmt --all` first.
 2. One message, in this order:
    - `edit <id> --check-ac <n>` for each passing criterion;
    - `edit <id> --section outcome --text "<outcome>"`: 1–3 lines, what changed for the user and how it was checked; not a log;

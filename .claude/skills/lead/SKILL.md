@@ -27,5 +27,6 @@ Toolbox: `explore`, `questions`, `planning`.
 
 Before the first hand-off of a session, ask the owner once with `AskUserQuestion` how to run:
 
-- Approve each go (Recommended): the owner answers each decision as it comes up.
+- Batch (Recommended when 2 or more ready tasks share no `paths`): one `developer` builds them one after another and runs only each task's acceptance commands. For QA, the Lead first saves the CLI output of the flows to try in `docs/agent-scratch/qa-before/`. Then one `reviewer` reviews the whole batch in a single pass, with QA if the owner wants it. Then the full checks run once, then one commit per task after the owner approves. A finding goes back to its own task only. Tasks that share `paths` with another task in the batch take the normal loop.
+- Approve each go: the owner answers each decision as it comes up.
 - Auto-approve loop: `/loop` takes the ready tasks to done and follows every recommended option. Record each approval under the task's `## Notes`. Stop and report on a real bug outside the task, a gate the plan says must hold, or the same check failing twice. Commits still need the owner.

@@ -9,7 +9,7 @@ argument-hint: "[task-id]"
 Tests prove the code. QA proves the product. Use the feature as a user would, and trust only what you see.
 
 1. From the task, list the user flows to try. Add one wrong-input case and one empty-store case.
-2. Build first: `cargo build --bin stone`.
+2. Build first: `cargo build --bin stone`. Compare with the old output the Lead saved in `docs/agent-scratch/qa-before/`. Build no second worktree; no saved output means report the new output only.
 3. CLI or MCP change: run each flow with `target/debug/stone.exe`. Check that:
    - the output answers what the user asked;
    - `--json` carries the same facts;
