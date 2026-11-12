@@ -363,8 +363,13 @@ fn the_project_map_lists_parts_review_ready_and_progress() {
     store.write("stone/tasks/CS-1.md", &task("Done", "done", ""));
     store.write("stone/tasks/CS-2.md", &task("Old", "archived", ""));
     store.write("stone/tasks/CS-3.md", &task("Check", "review", ""));
-    store.write("stone/tasks/CS-4.md", &task("Free", "todo", ""));
+    // Only a task that `task check` calls ready is listed, as the in-progress gate demands.
+    store.write(
+        "stone/tasks/CS-4.md",
+        "---\ntype: task\ntitle: Free\nstatus: todo\nmilestone: M-1\ndepends_on: []\ncomponents: [arch/app]\npaths: [src/main.rs]\n---\n\n## Acceptance criteria\n\n- [ ] `true`\n\n## Plan\n\n1. Do it.\n",
+    );
     store.write("stone/tasks/CS-5.md", &task("Blocked", "todo", "CS-4"));
+    store.write("stone/tasks/CS-6.md", &task("Unplanned", "todo", ""));
 
     let repo = store.repo();
     let map = repo.project_map().unwrap();
@@ -378,7 +383,7 @@ fn the_project_map_lists_parts_review_ready_and_progress() {
     assert_eq!(map.ready_total, 1);
     let milestone = (map.milestones[0].done, map.milestones[0].total);
     assert_eq!(map.milestones.len(), 1);
-    assert_eq!(milestone, (1, 4));
+    assert_eq!(milestone, (1, 5));
     assert_eq!(map.components.len(), 1);
     assert_eq!(map.components[0].code, ["src/**"]);
     assert_eq!(map.components[0].entries, ["src/main.rs#main"]);

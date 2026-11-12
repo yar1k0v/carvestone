@@ -110,7 +110,14 @@ impl Repo {
             .map(map_task)
             .collect();
 
-        let all_ready = self.next(usize::MAX)?;
+        // The map must match the in-progress gate, so a task with gaps is not offered.
+        let mut all_ready = Vec::new();
+        for row in self.next(usize::MAX)? {
+            let label = row.short.clone().unwrap_or_else(|| row.id.clone());
+            if self.task_check(&label)?.gaps.is_empty() {
+                all_ready.push(row);
+            }
+        }
         let ready_total = all_ready.len();
         let ready = all_ready.into_iter().take(READY).map(map_task).collect();
 

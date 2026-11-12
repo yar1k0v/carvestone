@@ -237,6 +237,11 @@ fn many_components(repo: &Repo) {
 fn the_map_stays_under_its_cap() {
     let repo = Repo::new();
     many_components(&repo);
+    // The one task that `task check` calls ready; the fixture's other todo tasks have no paths.
+    repo.write(
+        "stone/tasks/CS-9.md",
+        "---\ntype: task\ntitle: Ready one\nstatus: todo\ncomponents: [arch/part0]\npaths: [src/part0/Entry.cs]\n---\n\n## Acceptance criteria\n\n- [ ] `true`\n\n## Plan\n\n1. Do it.\n",
+    );
     let tokens = repo.cost("map", &["map"]);
     assert!(tokens <= 600, "map printed {tokens} tokens");
     let (code, out) = repo.run(&["map"]);
@@ -246,6 +251,10 @@ fn the_map_stays_under_its_cap() {
         out.lines().any(|line| line.starts_with("Ready")),
         "no ready line in:\n{out}"
     );
+    assert!(out.contains("Ready, 1 of 1 (`stone task check <id>`"), "{out}");
+    assert!(out.contains("CS-9"), "{out}");
+    assert!(!out.contains("stone task next"), "{out}");
+    assert!(!out.contains("CS-4"), "{out}");
 }
 
 #[test]

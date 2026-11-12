@@ -1657,7 +1657,7 @@ fn render_project_map(map: &ProjectMap, json: bool, budget: Option<usize>) -> an
             out.push_str("Ready: none\n");
         } else {
             out.push_str(&format!(
-                "Ready, {} of {} (`stone task next` lists more):\n",
+                "Ready, {} of {} (`stone task check <id>` shows what one lacks):\n",
                 map.ready.len(),
                 map.ready_total
             ));
