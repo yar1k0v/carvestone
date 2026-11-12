@@ -13,6 +13,7 @@ use crate::code_rank::rank;
 use crate::refresh::{BATCH_FILES, refresh_in};
 use crate::repo::{EngineError, Repo};
 use crate::search::Hit;
+use crate::tiers;
 
 const DEFAULT_LIMIT: usize = 20;
 /// Candidates an ambiguity error lists.
@@ -49,6 +50,10 @@ pub struct CodeResult {
     #[serde(skip_serializing_if = "is_zero")]
     #[cfg_attr(feature = "ts", ts(as = "Option<usize>", optional))]
     pub omitted: usize,
+    /// The size of what the limit or the budget left out, as one line per dropped row.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub left_out: Option<tiers::LeftOut>,
     /// "code index is still building ..." while the fill is unfinished.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
@@ -119,22 +124,26 @@ pub(crate) fn exactness(exact: bool) -> &'static str {
 }
 
 /// Keeps hits while the limit and the budget allow; the first hit always stays. Returns the kept
-/// hits and how many were left out.
-pub(crate) fn cut(hits: Vec<Hit>, limit: usize, budget: Option<usize>) -> (Vec<Hit>, usize) {
+/// hits, how many were left out, and the size of the left-out hits as their printed lines.
+pub(crate) fn cut(hits: Vec<Hit>, limit: usize, budget: Option<usize>) -> (Vec<Hit>, usize, Option<tiers::LeftOut>) {
     let limit = effective_limit(limit);
     let total = hits.len();
     let mut kept = Vec::new();
+    let mut dropped = Vec::new();
     let mut spent = 0;
+    let mut stopped = false;
     for hit in hits {
         let cost = hit.cost();
-        if kept.len() == limit || budget.is_some_and(|b| !kept.is_empty() && spent + cost > b) {
-            break;
+        stopped = stopped || kept.len() == limit || budget.is_some_and(|b| !kept.is_empty() && spent + cost > b);
+        if stopped {
+            dropped.push(hit.line());
+            continue;
         }
         spent += cost;
         kept.push(hit);
     }
     let omitted = total - kept.len();
-    (kept, omitted)
+    (kept, omitted, tiers::left_out("results", &dropped))
 }
 
 /// Serde skips a count of zero.
@@ -235,12 +244,13 @@ fn escape_like(text: &str) -> String {
 }
 
 fn result(conn: &Connection, q: &CodeQuery, query: String, hits: Vec<Hit>) -> Result<CodeResult, EngineError> {
-    let (hits, omitted) = cut(hits, q.limit, q.budget);
+    let (hits, omitted, left_out) = cut(hits, q.limit, q.budget);
     Ok(CodeResult {
         query,
         hits,
         truncated: omitted > 0,
         omitted,
+        left_out,
         note: building_note(conn)?,
         gap: None,
     })
@@ -475,6 +485,10 @@ pub struct Outline {
     #[serde(skip_serializing_if = "is_zero")]
     #[cfg_attr(feature = "ts", ts(as = "Option<usize>", optional))]
     pub omitted: usize,
+    /// The size of what the limit left out, as one line per dropped row.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub left_out: Option<tiers::LeftOut>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub note: Option<String>,
@@ -564,6 +578,11 @@ pub fn outline(repo: &Repo, q: &CodeQuery) -> Result<Outline, EngineError> {
     }
     let limit = if q.limit == 0 { usize::MAX } else { q.limit };
     let omitted = entries.len().saturating_sub(limit);
+    let dropped: Vec<String> = entries[limit.min(entries.len())..]
+        .iter()
+        .map(OutlineEntry::line)
+        .collect();
+    let left_out = tiers::left_out("entries", &dropped);
     entries.truncate(limit);
     // Built before the target moves into the answer.
     let gap = if entries.is_empty() {
@@ -576,6 +595,7 @@ pub fn outline(repo: &Repo, q: &CodeQuery) -> Result<Outline, EngineError> {
         path,
         entries,
         omitted,
+        left_out,
         note: building_note(conn)?,
         gap,
     })

@@ -18,6 +18,7 @@ use crate::code_rank::is_test_path;
 use crate::owner::arch_elements;
 use crate::repo::{EngineError, Repo};
 use crate::resolve::Snapshot;
+use crate::tiers;
 
 /// A sentinel for a declared entry the code graph no longer holds.
 const GONE: &str = "gone";
@@ -68,6 +69,10 @@ pub struct Entries {
     #[serde(skip_serializing_if = "crate::code::is_zero")]
     #[cfg_attr(feature = "ts", ts(as = "Option<usize>", optional))]
     pub omitted: usize,
+    /// The size of what the limit left out, as one line per dropped row.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub left_out: Option<tiers::LeftOut>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub note: Option<String>,
@@ -664,9 +669,11 @@ pub fn entries(repo: &Repo, q: &CodeQuery) -> Result<Entries, EngineError> {
 
     let mut room = effective_limit(q.limit);
     let mut omitted = 0;
+    let mut dropped = Vec::new();
     for group in &mut groups {
         if group.entries.len() > room {
             omitted += group.entries.len() - room;
+            dropped.extend(group.entries[room..].iter().map(EntryRow::line));
             group.entries.truncate(room);
         }
         room -= group.entries.len();
@@ -676,6 +683,7 @@ pub fn entries(repo: &Repo, q: &CodeQuery) -> Result<Entries, EngineError> {
         groups,
         truncated: omitted > 0,
         omitted,
+        left_out: tiers::left_out("entries", &dropped),
         note: building_note(conn)?,
     })
 }

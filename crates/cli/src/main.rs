@@ -1912,19 +1912,28 @@ fn pretty<T: serde::Serialize>(value: &T) -> anyhow::Result<String> {
     Ok(format!("{}\n", serde_json::to_string_pretty(value)?))
 }
 
-/// The cut-off and still-building lines every code query ends with: `omitted` results left out by
-/// the engine and by the printed budget together.
-fn code_tail(omitted: usize, note: Option<&str>) -> String {
+/// The cut-off and still-building lines every code query ends with: the left-out line for what the
+/// engine and the printed budget cut off together, then the note.
+fn code_tail(left: Option<&tiers::LeftOut>, note: Option<&str>) -> String {
     let mut out = String::new();
-    match omitted {
-        0 => {}
-        1 => out.push_str("1 more result left out; raise --limit or --budget\n"),
-        n => out.push_str(&format!("{n} more results left out; raise --limit or --budget\n")),
+    if let Some(left) = left {
+        out.push_str(&tiers::left_out_line(left, false, "--limit or --budget"));
+        out.push('\n');
     }
     if let Some(note) = note {
         out.push_str(&format!("note: {note}\n"));
     }
     out
+}
+
+/// What the answer left out: what the engine dropped, plus what the CLI drops. What the CLI drops
+/// is measured as it would print it, on top of what the engine dropped.
+fn cli_left(engine: Option<&tiers::LeftOut>, name: &str, printed: &str) -> Option<tiers::LeftOut> {
+    let lines: Vec<String> = printed.lines().map(str::to_string).collect();
+    if engine.is_none() && lines.is_empty() {
+        return None;
+    }
+    Some(tiers::LeftOut::with_more(engine, name, &lines))
 }
 
 /// The lines an empty answer adds about what is indexed, each on its own line; nothing when the
@@ -1946,7 +1955,7 @@ fn linked_or_none(
             "{}\n{}{}",
             none(&result.query),
             gap_lines(result.gap.as_deref()),
-            code_tail(0, result.note.as_deref())
+            code_tail(None, result.note.as_deref())
         ));
     }
     render_code(&result, json, Detail::One, budget)
@@ -1963,12 +1972,14 @@ fn render_code(result: &CodeResult, json: bool, detail: Detail, budget: Option<u
             "no matches for \"{}\"\n{}{}",
             result.query,
             gap_lines(result.gap.as_deref()),
-            code_tail(0, note)
+            code_tail(None, note)
         ));
     }
     Ok(lean::fit(budget, result.hits.len(), |kept| {
         let mut out = lean::symbol_lines(&result.hits[..kept], detail, true, &mut HashSet::new());
-        out.push_str(&code_tail(result.omitted + (result.hits.len() - kept), note));
+        let dropped = lean::symbol_lines(&result.hits[kept..], detail, true, &mut HashSet::new());
+        let left = cli_left(result.left_out.as_ref(), "results", &dropped);
+        out.push_str(&code_tail(left.as_ref(), note));
         out
     }))
 }
@@ -1984,41 +1995,46 @@ fn render_outline(result: &Outline, json: bool, full: bool, budget: Option<usize
             "{} declares nothing\n{}{}",
             result.path,
             gap_lines(result.gap.as_deref()),
-            code_tail(0, note)
+            code_tail(None, note)
         ));
     }
+    let row = |entry: &code::OutlineEntry| -> String {
+        if !full {
+            return entry.line();
+        }
+        let text = if entry.signature.is_empty() {
+            entry.name.as_str()
+        } else {
+            entry.signature.as_str()
+        };
+        // `export function f()` says its kind itself; a label in front would repeat it.
+        let said = entry
+            .signature
+            .split(entry.name.as_str())
+            .next()
+            .is_some_and(|before| before.split_whitespace().any(|word| word == entry.kind));
+        let label = if said {
+            String::new()
+        } else {
+            format!("{} ", entry.kind)
+        };
+        let lines = if entry.lines[0] == entry.lines[1] {
+            format!("L{}", entry.lines[0])
+        } else {
+            format!("L{}-{}", entry.lines[0], entry.lines[1])
+        };
+        let indent = "  ".repeat(entry.depth as usize + 1);
+        format!("{indent}{label}{text}  {lines}")
+    };
     Ok(lean::fit(budget, result.entries.len(), |kept| {
         let mut out = format!("{}\n", result.path);
         for entry in &result.entries[..kept] {
-            if !full {
-                out.push_str(&format!("{}\n", entry.line()));
-                continue;
-            }
-            let text = if entry.signature.is_empty() {
-                entry.name.as_str()
-            } else {
-                entry.signature.as_str()
-            };
-            // `export function f()` says its kind itself; a label in front would repeat it.
-            let said = entry
-                .signature
-                .split(entry.name.as_str())
-                .next()
-                .is_some_and(|before| before.split_whitespace().any(|word| word == entry.kind));
-            let label = if said {
-                String::new()
-            } else {
-                format!("{} ", entry.kind)
-            };
-            let lines = if entry.lines[0] == entry.lines[1] {
-                format!("L{}", entry.lines[0])
-            } else {
-                format!("L{}-{}", entry.lines[0], entry.lines[1])
-            };
-            let indent = "  ".repeat(entry.depth as usize + 1);
-            out.push_str(&format!("{indent}{label}{text}  {lines}\n"));
+            out.push_str(&row(entry));
+            out.push('\n');
         }
-        out.push_str(&code_tail(result.omitted + (result.entries.len() - kept), note));
+        let dropped = result.entries[kept..].iter().map(row).collect::<Vec<_>>().join("\n");
+        let left = cli_left(result.left_out.as_ref(), "entries", &dropped);
+        out.push_str(&code_tail(left.as_ref(), note));
         out
     }))
 }
@@ -2038,7 +2054,7 @@ fn render_impact(result: &Impact, json: bool, budget: Option<usize>) -> anyhow::
         }
     }
     if result.dependents.is_empty() {
-        let note = code_tail(result.omitted, result.note.as_deref());
+        let note = code_tail(result.left_out.as_ref(), result.note.as_deref());
         return Ok(format!(
             "nothing depends on {}\n{}{tail}{note}",
             result.query,
@@ -2048,10 +2064,9 @@ fn render_impact(result: &Impact, json: bool, budget: Option<usize>) -> anyhow::
     Ok(lean::fit(budget, result.dependents.len(), |kept| {
         let mut out = lean::symbol_lines(&result.dependents[..kept], Detail::Two, true, &mut HashSet::new());
         out.push_str(&tail);
-        out.push_str(&code_tail(
-            result.omitted + (result.dependents.len() - kept),
-            result.note.as_deref(),
-        ));
+        let dropped = lean::symbol_lines(&result.dependents[kept..], Detail::Two, true, &mut HashSet::new());
+        let left = cli_left(result.left_out.as_ref(), "results", &dropped);
+        out.push_str(&code_tail(left.as_ref(), result.note.as_deref()));
         out
     }))
 }
@@ -2061,7 +2076,7 @@ fn render_path(result: &PathResult, json: bool, budget: Option<usize>) -> anyhow
         return pretty(result);
     }
     if result.steps.is_empty() {
-        let tail = code_tail(result.omitted, result.note.as_deref());
+        let tail = code_tail(result.left_out.as_ref(), result.note.as_deref());
         return Ok(format!(
             "no path between {} and {}\n{}{tail}",
             result.from,
@@ -2079,10 +2094,9 @@ fn render_path(result: &PathResult, json: bool, budget: Option<usize>) -> anyhow
             false,
             &mut HashSet::new(),
         ));
-        out.push_str(&code_tail(
-            result.omitted + (result.steps.len() - kept),
-            result.note.as_deref(),
-        ));
+        let dropped = lean::symbol_lines(&result.steps[kept..], Detail::One, false, &mut HashSet::new());
+        let left = cli_left(result.left_out.as_ref(), "results", &dropped);
+        out.push_str(&code_tail(left.as_ref(), result.note.as_deref()));
         out
     }))
 }
@@ -2179,7 +2193,7 @@ fn render_explain(result: &Explain, json: bool, budget: Option<usize>) -> anyhow
         notes.push("nothing indexed here: no files, symbols, links, tasks or docs".to_string());
     }
     notes.extend(
-        code_tail(result.omitted, result.note.as_deref())
+        code_tail(result.left_out.as_ref(), result.note.as_deref())
             .lines()
             .map(str::to_string),
     );
@@ -2195,23 +2209,28 @@ fn render_entries(result: &Entries, json: bool, budget: Option<usize>) -> anyhow
     if total == 0 {
         return Ok(format!(
             "no entry points found\n{}",
-            code_tail(0, result.note.as_deref())
+            code_tail(None, result.note.as_deref())
         ));
     }
     Ok(lean::fit(budget, total, |kept| {
-        let mut left = kept;
+        let mut room = kept;
         let mut out = String::new();
+        let mut dropped = String::new();
         for group in &result.groups {
-            if left == 0 {
-                break;
+            let shown = group.entries.len().min(room);
+            if shown > 0 {
+                out.push_str(&format!("{}\n", group.component));
+                for row in &group.entries[..shown] {
+                    out.push_str(&lean::entry_line(row));
+                }
             }
-            out.push_str(&format!("{}\n", group.component));
-            for row in group.entries.iter().take(left) {
-                out.push_str(&lean::entry_line(row));
+            for row in &group.entries[shown..] {
+                dropped.push_str(&lean::entry_line(row));
             }
-            left = left.saturating_sub(group.entries.len());
+            room -= shown;
         }
-        out.push_str(&code_tail(result.omitted + (total - kept), result.note.as_deref()));
+        let left = cli_left(result.left_out.as_ref(), "entries", &dropped);
+        out.push_str(&code_tail(left.as_ref(), result.note.as_deref()));
         out
     }))
 }

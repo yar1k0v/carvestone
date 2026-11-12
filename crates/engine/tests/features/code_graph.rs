@@ -5,6 +5,7 @@ use carvestone_engine::code::{CodeQuery, OutlineEntry, deps, find, outline, uses
 use carvestone_engine::code_graph::{impact, path};
 use carvestone_engine::code_native::{NativeQuery, native};
 use carvestone_engine::search::{Hit, SearchQuery, search};
+use carvestone_engine::tiers::LeftOut;
 
 use crate::support::Store;
 
@@ -209,6 +210,63 @@ fn outline_lists_the_symbols_of_a_file_or_of_one_symbol_with_lines() {
             "  app::Runner::total method total() : u32 L8-10"
         ]
     );
+}
+
+#[test]
+fn a_limit_names_the_size_of_the_code_results_it_left_out() {
+    let store = rust_project();
+    let repo = store.repo();
+    let limited = |target: &str| CodeQuery {
+        limit: 1,
+        ..query(target)
+    };
+
+    // uses of `helper`: two hits, and the limit drops the second,
+    // "app::run  src/app.rs:L13-15  calls  exact  @L14 pub fn run() -> u32", 67 chars: 17 tokens.
+    assert_eq!(uses(&repo, &query("helper")).unwrap().left_out, None);
+    assert_eq!(
+        uses(&repo, &limited("helper")).unwrap().left_out,
+        Some(LeftOut {
+            name: "results".into(),
+            lines: 1,
+            tokens: 17
+        })
+    );
+
+    // outline of src/app.rs: the limit drops the method row and the `run` row.
+    // "    method total() : u32  L8-10" is 31 chars, "  function run() : u32  L13-15" is 30,
+    // and with the newline between them 62 chars: 16 tokens.
+    assert_eq!(outline(&repo, &query("src/app.rs")).unwrap().left_out, None);
+    assert_eq!(
+        outline(&repo, &limited("src/app.rs")).unwrap().left_out,
+        Some(LeftOut {
+            name: "entries".into(),
+            lines: 2,
+            tokens: 16
+        })
+    );
+
+    // entries: two `fn main` files, sorted by path; the limit drops `src/b.rs#main`.
+    // "src/b.rs#main  main  fn main" is 28 chars: 7 tokens.
+    let mains = project(&[
+        ("Cargo.toml", CARGO),
+        ("src/a.rs", "fn main() {}\n"),
+        ("src/b.rs", "fn main() {}\n"),
+    ]);
+    let repo = mains.repo();
+    assert_eq!(entries_of(&repo, query("")).left_out, None);
+    assert_eq!(
+        entries_of(&repo, limited("")).left_out,
+        Some(LeftOut {
+            name: "entries".into(),
+            lines: 1,
+            tokens: 7
+        })
+    );
+}
+
+fn entries_of(repo: &carvestone_engine::Repo, q: CodeQuery) -> carvestone_engine::code_entries::Entries {
+    carvestone_engine::code_entries::entries(repo, &q).unwrap()
 }
 
 #[test]

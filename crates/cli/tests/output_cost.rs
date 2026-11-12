@@ -297,6 +297,17 @@ fn budget_output_stays_within_the_budget() {
         last.starts_with("left out: ") && last.contains("about") && last.ends_with("; raise --limit or --budget"),
         "no left-out line in:\n{out}"
     );
+    for kind in ["uses", "impact"] {
+        let (code, out) = repo.run(&["code", kind, "Shop.Ledger.Post", "--budget", "1"]);
+        assert_eq!(code, 0, "{out}");
+        let last = out.lines().last().unwrap_or_default();
+        assert!(
+            last.starts_with("left out: results (")
+                && last.contains("about")
+                && last.ends_with("; raise --limit or --budget"),
+            "no left-out line for code {kind} in:\n{out}"
+        );
+    }
     let (code, out) = repo.run(&["code", "explain", "arch/shop", "--budget", "60"]);
     assert_eq!(code, 0, "{out}");
     assert_eq!(out.lines().next().unwrap_or_default(), "arch/shop", "{out}");

@@ -22,6 +22,7 @@ use crate::owner::{Element, arch_elements};
 use crate::repo::{EngineError, Repo};
 use crate::resolve::Snapshot;
 use crate::search::Hit;
+use crate::tiers;
 use carvestone_graph::project_facts;
 
 const DEFAULT_DEPTH: usize = 3;
@@ -46,6 +47,10 @@ pub struct Impact {
     #[serde(skip_serializing_if = "is_zero")]
     #[cfg_attr(feature = "ts", ts(as = "Option<usize>", optional))]
     pub omitted: usize,
+    /// The size of what the limit or the budget left out, as one line per dropped row.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub left_out: Option<tiers::LeftOut>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub note: Option<String>,
@@ -71,6 +76,10 @@ pub struct PathResult {
     #[serde(skip_serializing_if = "is_zero")]
     #[cfg_attr(feature = "ts", ts(as = "Option<usize>", optional))]
     pub omitted: usize,
+    /// The size of what the limit or the budget left out, as one line per dropped row.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub left_out: Option<tiers::LeftOut>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub note: Option<String>,
@@ -117,6 +126,10 @@ pub struct Explain {
     #[serde(skip_serializing_if = "is_zero")]
     #[cfg_attr(feature = "ts", ts(as = "Option<usize>", optional))]
     pub omitted: usize,
+    /// The size of what the limit or the budget left out, as one line per dropped row.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub left_out: Option<tiers::LeftOut>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub note: Option<String>,
@@ -420,7 +433,7 @@ pub fn impact(repo: &Repo, q: &CodeQuery) -> Result<Impact, EngineError> {
         .collect();
     let (tasks, docs) = related(&snapshot, conn, &owners, &paths, &qnames)?;
 
-    let (dependents, omitted) = cut(dependents.into_iter().map(|d| d.hit).collect(), q.limit, q.budget);
+    let (dependents, omitted, left_out) = cut(dependents.into_iter().map(|d| d.hit).collect(), q.limit, q.budget);
     // Built before the target moves into the answer.
     let gap = if dependents.is_empty() {
         Some(code_gap::of_target(conn, &target)?)
@@ -435,6 +448,7 @@ pub fn impact(repo: &Repo, q: &CodeQuery) -> Result<Impact, EngineError> {
         docs,
         truncated: omitted > 0,
         omitted,
+        left_out,
         note: building_note(conn)?,
         gap,
     })
@@ -532,6 +546,7 @@ pub fn path(repo: &Repo, q: &CodeQuery) -> Result<PathResult, EngineError> {
             direction: "none".to_string(),
             truncated: false,
             omitted: 0,
+            left_out: None,
             note,
             gap: Some(gap),
         });
@@ -545,7 +560,7 @@ pub fn path(repo: &Repo, q: &CodeQuery) -> Result<PathResult, EngineError> {
             Some(edge) => hit_of(&s, edge.exact, &edge.kind),
         });
     }
-    let (steps, omitted) = cut(hits, q.limit, q.budget);
+    let (steps, omitted, left_out) = cut(hits, q.limit, q.budget);
     Ok(PathResult {
         from: a.label,
         to: b.label,
@@ -554,6 +569,7 @@ pub fn path(repo: &Repo, q: &CodeQuery) -> Result<PathResult, EngineError> {
         direction: direction.to_string(),
         truncated: omitted > 0,
         omitted,
+        left_out,
         note,
         gap: None,
     })
@@ -901,7 +917,7 @@ pub fn explain(repo: &Repo, q: &CodeQuery) -> Result<Explain, EngineError> {
         .unwrap_or_default();
 
     let key_count = key_symbols.len();
-    let (kept, omitted) = cut(
+    let (kept, omitted, left_out) = cut(
         key_symbols.into_iter().chain(files).collect(),
         KEY_SYMBOLS + effective_limit(q.limit),
         q.budget,
@@ -924,6 +940,7 @@ pub fn explain(repo: &Repo, q: &CodeQuery) -> Result<Explain, EngineError> {
         docs,
         truncated: omitted > 0,
         omitted,
+        left_out,
         note: building_note(conn)?,
         folders,
         folder_edges,

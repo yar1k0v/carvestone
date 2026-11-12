@@ -4,6 +4,7 @@ import type { EntryRow } from "./EntryRow";
 import type { FolderEdge } from "./FolderEdge";
 import type { FolderRow } from "./FolderRow";
 import type { Hit } from "./Hit";
+import type { LeftOut } from "./LeftOut";
 import type { Library } from "./Library";
 import type { UseLink } from "./UseLink";
 
@@ -23,7 +24,11 @@ key_symbols: Array<Hit>, inbound: Array<Dependency>, outbound: Array<Dependency>
 /**
  * Files and key symbols the limit or the budget left out.
  */
-omitted?: number, note?: string, 
+omitted?: number, 
+/**
+ * The size of what the limit or the budget left out, as one line per dropped row.
+ */
+left_out?: LeftOut, note?: string, 
 /**
  * The top folders of a component or folder, with their files: its inside view.
  */
