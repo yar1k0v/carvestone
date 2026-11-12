@@ -70,7 +70,7 @@ fn rust_project() -> Store {
 fn each_language_finds_a_definition_and_its_call_site_in_another_file() {
     // (language, files, name, find lines, uses lines)
     type Row<'a> = (&'a str, &'a [(&'a str, &'a str)], &'a str, &'a [&'a str], &'a [&'a str]);
-    let rows: [Row; 10] = [
+    let rows: [Row; 11] = [
         (
             "rust",
             &[
@@ -105,6 +105,25 @@ fn each_language_finds_a_definition_and_its_call_site_in_another_file() {
             ],
             "World::new",
             &["world::World::new  src/world.rs:L4-6  method  exact  pub fn new() -> World"],
+            &["app::run  src/app.rs:L3-5  calls  exact  @L4 pub fn run() -> World"],
+        ),
+        (
+            "rust method tail keeps case",
+            &[
+                ("Cargo.toml", CARGO),
+                ("src/lib.rs", "pub mod app;\npub mod geo;\n"),
+                (
+                    "src/geo.rs",
+                    "pub mod world;\n\npub struct World;\n\nimpl World {\n    pub fn new() -> World {\n        World\n    }\n}\n",
+                ),
+                ("src/geo/world.rs", "pub fn new() -> u32 {\n    1\n}\n"),
+                (
+                    "src/app.rs",
+                    "use crate::geo::World;\n\npub fn run() -> World {\n    World::new()\n}\n",
+                ),
+            ],
+            "World::new",
+            &["geo::World::new  src/geo.rs:L6-8  method  exact  pub fn new() -> World"],
             &["app::run  src/app.rs:L3-5  calls  exact  @L4 pub fn run() -> World"],
         ),
         (

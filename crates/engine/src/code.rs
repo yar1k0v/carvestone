@@ -260,7 +260,7 @@ fn tail_names(conn: &Connection, text: &str) -> Result<Vec<String>, EngineError>
     let [tail_colons, tail_dot] = tail_patterns(text);
     let mut stmt = conn.prepare(
         "SELECT DISTINCT qname FROM symbols \
-         WHERE (name = ?1 OR qname LIKE ?2 ESCAPE '\\' OR qname LIKE ?3 ESCAPE '\\') AND kind != 'file' \
+         WHERE (name = ?1 OR qname GLOB ?2 OR qname GLOB ?3) AND kind != 'file' \
          ORDER BY qname",
     )?;
     let names = stmt
@@ -283,11 +283,15 @@ fn escape_like(text: &str) -> String {
     text.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
 }
 
-/// LIKE patterns for a qualified name that ends in `text` after `::` or `.`: the same tail rule as
-/// `code_entries::symbol_matches`.
+fn escape_glob(text: &str) -> String {
+    text.replace('[', "[[]").replace('*', "[*]").replace('?', "[?]")
+}
+
+/// GLOB patterns for a qualified name that ends in `text` after `::` or `.`, letter case kept: the
+/// same tail rule as `code_entries::symbol_matches`.
 fn tail_patterns(text: &str) -> [String; 2] {
-    let escaped = escape_like(text);
-    [format!("%::{escaped}"), format!("%.{escaped}")]
+    let escaped = escape_glob(text);
+    [format!("*::{escaped}"), format!("*.{escaped}")]
 }
 
 fn result(conn: &Connection, q: &CodeQuery, query: String, hits: Vec<Hit>) -> Result<CodeResult, EngineError> {
@@ -321,10 +325,10 @@ pub fn find(repo: &Repo, q: &CodeQuery) -> Result<CodeResult, EngineError> {
     let mut stmt = conn.prepare(
         "SELECT s.qname, s.kind, s.signature, s.line_start, s.line_end, f.path, \
                 CASE WHEN s.qname = ?1 THEN 0 WHEN s.name = ?1 THEN 1 \
-                     WHEN s.qname LIKE ?5 ESCAPE '\\' OR s.qname LIKE ?6 ESCAPE '\\' THEN 1 ELSE 2 END \
+                     WHEN s.qname GLOB ?5 OR s.qname GLOB ?6 THEN 1 ELSE 2 END \
          FROM symbols s JOIN files f ON f.id = s.file_id \
          WHERE (s.qname = ?1 OR s.name = ?1 OR s.qname LIKE ?2 ESCAPE '\\' OR s.name LIKE ?2 ESCAPE '\\' \
-                OR s.qname LIKE ?5 ESCAPE '\\' OR s.qname LIKE ?6 ESCAPE '\\') \
+                OR s.qname GLOB ?5 OR s.qname GLOB ?6) \
            AND (?3 IS NULL OR s.kind = ?3) AND (?3 = 'file' OR s.kind != 'file') \
          ORDER BY 7, s.qname, f.path, s.line_start LIMIT ?4",
     )?;
