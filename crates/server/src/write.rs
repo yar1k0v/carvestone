@@ -66,7 +66,7 @@ pub(crate) async fn patch_item(
         replace_nested: body.replace_nested,
         remove_section: body.remove_section,
         check_ac: body.check_ac.into_iter().collect(),
-        note: body.note,
+        note: body.note.into_iter().collect(),
         force: body.force,
         verify: None,
     };

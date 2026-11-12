@@ -293,7 +293,7 @@ fn a_note_lands_under_notes_once() {
         store.write("stone/tasks/CS-1.md", &file);
         let repo = store.repo();
         let req = Edit {
-            note: Some(note.to_string()),
+            note: vec![note.to_string()],
             ..Edit::default()
         };
         match expected {

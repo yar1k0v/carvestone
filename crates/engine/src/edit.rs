@@ -26,8 +26,8 @@ pub struct Edit {
     pub remove_section: Option<String>,
     /// The 1-based checkboxes of `## Acceptance criteria` to tick.
     pub check_ac: Vec<usize>,
-    /// One line to add under `## Notes`, dated today.
-    pub note: Option<String>,
+    /// Lines to add under `## Notes`, dated today, in order.
+    pub note: Vec<String>,
     /// Set a task to in-progress although the ready check finds gaps.
     pub force: bool,
     /// Append a `verified` stamp by this actor: the item was re-read and still holds.
@@ -288,7 +288,7 @@ impl Repo {
             && req.section.is_none()
             && req.remove_section.is_none()
             && req.check_ac.is_empty()
-            && req.note.is_none()
+            && req.note.is_empty()
             && req.verify.is_none()
         {
             return Err(EngineError::Invalid(
@@ -346,7 +346,7 @@ impl Repo {
             for &n in &req.check_ac {
                 doc.body = check_box(&doc.body, "Acceptance criteria", n)?;
             }
-            if let Some(text) = &req.note {
+            for text in &req.note {
                 doc.body = add_note(&doc.body, text, &today())?;
             }
             if let Some(by) = &req.verify {

@@ -247,6 +247,20 @@ fn every_command_answers_on_a_small_store() {
         .collect();
     assert_eq!(notes.len(), 1, "one dated note line in:\n{task}");
 
+    // `--note` repeats: every text lands once, in the order given.
+    let (code, text) = store.run(&["edit", "CS-1", "--note", "y", "--note", "z", "--note", "y"]);
+    assert_eq!(code, 0, "stone edit with repeated --note: {text}");
+    let task = store.read("stone/tasks/CS-1.md");
+    let lines: Vec<&str> = task.lines().collect();
+    let at = |end: &str| -> Vec<usize> {
+        (0..lines.len())
+            .filter(|&i| lines[i].starts_with("- ") && lines[i].ends_with(end))
+            .collect()
+    };
+    let (ys, zs) = (at(": y"), at(": z"));
+    assert_eq!((ys.len(), zs.len()), (1, 1), "one y and one z note in:\n{task}");
+    assert!(ys[0] < zs[0], "y before z in:\n{task}");
+
     // The git commands read the store's own repo, which `init` made; they need the file staged.
     let staged = store.command("git", &["-C", "stone", "add", "-A"]).output().unwrap();
     assert!(staged.status.success());

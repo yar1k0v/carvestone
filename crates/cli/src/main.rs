@@ -455,9 +455,9 @@ struct EditArgs {
     /// Tick the Nth checkbox under Acceptance criteria; repeat for more.
     #[arg(long)]
     check_ac: Vec<usize>,
-    /// Add a dated bullet to ## Notes; the same text twice adds it once.
+    /// Add a dated bullet to ## Notes; repeat for more; the same text twice adds it once.
     #[arg(long, allow_hyphen_values = true)]
-    note: Option<String>,
+    note: Vec<String>,
     /// Replace the section although it holds sub-sections the new text does not carry.
     #[arg(long, requires = "section")]
     replace_nested: bool,
