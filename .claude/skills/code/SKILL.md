@@ -1,32 +1,25 @@
 ---
 name: code
-description: Developer skill. Makes the planned edits layer by layer with quick checks, staying inside the task's paths and plan; never decides.
+description: Makes the planned edits layer by layer with quick checks, inside the task's paths and plan. Use when a ready task is explored and needs its code or docs changed.
 argument-hint: "[task-id]"
 ---
 
-# code (Developer)
+# code
 
-You execute the plan and make no decisions.
+1. Run `task move <id> in-progress` in the same message as the first Reads, unless the task is already in progress.
+2. Fill gaps in the same request as the Reads:
+   - a definition or fields: `code outline <qualified name>`, or LSP (workspaceSymbol, then goToDefinition or hover). Never Grep a generated file;
+   - callers: `code uses <name>`, or LSP findReferences;
+   - an API this repo does not already use the same way: `mcp__docs__search_docs`;
+   - text the graph does not hold: `git grep -n "<text>" -- <dir>`. Never `grep -r`.
+3. Edit one layer per batch, in the profile's layer order: every Edit of the layer in one message, across files. Then run the layer's quick check: LSP diagnostics (`.claude/rules/crew.md#Working`).
+4. When every step is done and the quick checks are green, go to `check`.
+5. Refactor: keep behavior and leave the build green after each step. Put a fix you notice under `## Notes`.
+6. Feature: copy the pattern the plan names. UI is done only when the screen matches its board on the design canvas (ADR-14), in light, dark and phone views.
 
-## Steps
+Stop, with the reason under `## Notes` (`edit <id> --section notes`), when:
 
-1. `task move <id> in-progress` in the same message as the first Reads (if not already in progress).
-2. Fill gaps in the same request as the Reads, in this order:
-   - a type's fields or a symbol's definition explore didn't show: `code outline <qualified name>`, or `LSP` (workspaceSymbol by name, then goToDefinition or hover at its line); never Grep a generated file;
-   - callers: `code uses <name>`, or `LSP` findReferences;
-   - a library or framework API this repo doesn't already use the same way: `mcp__docs__search_docs` (library and version from the component's `libraries`);
-   - `LSP` and `mcp__docs__*` are deferred tools: load the ones you need with `ToolSearch select:LSP,mcp__docs__search_docs` in the same message as the first Reads;
-   - text the graph doesn't hold: `git grep -n "<text>" -- <dir>`, never `grep -r` (it also hits `target/` and `node_modules/`).
-3. Edits, one layer per batch, in the profile's layer order: every Edit of the layer in one message, across files. Run that layer's quick check from the checks in the next batch (a subagent gets no LSP diagnostics with its edit results; `cargo check -p <crate>` or `pnpm --dir web typecheck` is the type check).
-4. Every step of the plan done and the quick checks green: hand over to check.
-
-By task kind:
-- refactor: no behavior change; every step leaves the build green; a fix you notice goes under `## Notes`, not into the change.
-- feature: copy the pattern the plan names. UI is done only when the screen matches its board on the design canvas (ADR-14), in light, dark and phone views.
-
-## Stops
-
-- No ready task: say so and stop. The Lead plans it first.
-- The code contradicts the task or plan, or a decision is needed: under `## Notes` (`edit <id> --section notes`), stop.
-- A file outside `paths` must change: under `## Notes`, stop.
-- Over the size budget (size-s 15, size-m 30 requests): where the work stands under `## Notes`, stop.
+- there is no ready task;
+- the code contradicts the task or plan, or a decision is needed;
+- a file outside `paths` must change;
+- the work passes the size budget (size-s 15, size-m 30 requests). Note where it stands.

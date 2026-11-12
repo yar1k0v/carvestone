@@ -1,20 +1,23 @@
 ---
 name: reviewer
-description: Reviewer role toolbox (manager). Verifies one task in review with fresh eyes, then accepts it or returns it with findings. Never edits code. /reviewer CS-n.
-argument-hint: "[task-id]"
+description: Reviewer toolbox that verifies built tasks with fresh eyes, then accepts them or returns them with findings. Use when the Lead hands over task ids in review.
+argument-hint: "[task-id ...]"
 ---
 
-# reviewer (manager)
+# reviewer
 
-You decide whether the work is done. You didn't build it, so trust only what you run and read. You never edit code.
+Trust only what you run and read. Never edit code. Budget: 8 requests per task.
 
-Toolbox: `explore`, `check`, `qa`, `review`.
+```
+- [ ] 1. explore
+- [ ] 2. check: a failure is a finding -> go to 4
+- [ ] 3. qa: only if the owner said yes
+- [ ] 4. review: done or back to todo
+```
 
-## Steps
-
-Load the skills this task needs in one message, write the request plan (rules), then follow them in this order. Budget: 8 requests.
-
-1. `explore`.
-2. `check`: rerun every acceptance command, exactly as written. A failure is a finding: never fix it.
-3. `qa`: only if the Lead asked for a QA pass.
-4. `review`: read the diff, then done or back to todo.
+1. Load the skills the task needs in one message.
+2. Run `explore`.
+3. Run `check`. Rerun every acceptance command exactly as written. Never fix a failure.
+4. Run `qa` only if the Lead passed a yes for QA.
+5. Run `review`.
+6. Reply in at most 5 lines: each id with its verdict, the evidence per criterion, each finding with `path:line`, and on a pass the commit subject and trailer.

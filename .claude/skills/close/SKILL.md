@@ -1,16 +1,15 @@
 ---
 name: close
-description: Developer skill, last step of the toolbox. Ticks the passing criteria, writes the outcome, moves the task to review and runs the stone check.
-argument-hint: "[task-id]"
+description: Ticks the passing criteria, writes the outcome, moves the task to review and runs the stone check. Use when check reported every criterion with evidence.
 ---
 
-# close (Developer)
+# close
 
-1. Only after check reported every criterion with evidence. Code changed: run `bash scripts/check.sh fmt cargo fmt --all` first.
-2. One message, in this order:
+1. Start only after `check` reported every criterion with evidence.
+2. If code changed, run `bash scripts/check.sh fmt cargo fmt --all`.
+3. Send one message with these, in order:
    - `edit <id> --check-ac <n>` for each passing criterion;
-   - `edit <id> --section outcome --text "<outcome>"`: 1–3 lines, what changed for the user and how it was checked; not a log;
+   - `edit <id> --section outcome --text "<outcome>"`: 1-3 lines, what changed for the user and how it was checked. Not a log;
    - `task move <id> review`;
    - `check`, then `get <id>#acceptance-criteria`.
-3. No criterion may stay unticked; otherwise say which one is open.
-4. Reply in at most 3 lines. No commit unless the owner asks.
+4. If a criterion stays unticked, say which one is open.
