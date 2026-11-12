@@ -16,7 +16,7 @@ Run the session by `.claude/rules/crew.md#Session flow`. Report as to a product 
 - [ ] 5. qa-before: save the old output of each changed CLI flow
 - [ ] 6. build
 - [ ] 7. review
-- [ ] 8. full checks
+- [ ] 8. full checks: `bash scripts/full-check.sh`
 - [ ] 9. commit and push, after the owner approves
 ```
 

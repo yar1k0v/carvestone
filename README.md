@@ -138,7 +138,7 @@ stone search "scip"
 
 ## Development
 
-Full checks:
+Run the full checks with `bash scripts/full-check.sh`. It stops at the first failure and adds the web checks when `web/` changed. The commands it runs:
 
 ```bash
 cargo fmt --all --check

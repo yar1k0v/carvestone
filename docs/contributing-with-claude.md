@@ -26,6 +26,8 @@ claude
 2. Install the 2 LSP plugins in `enabledPlugins` (`rust-analyzer-lsp`, `typescript-lsp`) from `claude-plugins-official`. If Claude Code does not offer them, run `/plugin`.
 3. Claude Code reads `CLAUDE.md` and loads the `lead` skill. It asks you for the session goal.
 
+Run the full checks with `bash scripts/full-check.sh`. It stops at the first failure and adds the web checks when `web/` changed.
+
 All commands in the rules and skills are Bash, on every OS. PowerShell is optional: the `PowerShell(...)` allow rules and agent tools only apply on machines that have it, and other machines ignore them.
 
 ## What is shared

@@ -58,12 +58,4 @@
 4. Run `pnpm --dir web build` before `cargo build --features ui` (it embeds `web/dist`).
 5. Perf and timing tests: release build, nothing else compiling.
 6. After a code change, run `cargo build --bin stone` before using `target/debug/stone`.
-7. Full checks, once at the end. Add the `pnpm` line when `web/` changed:
-
-```bash
-cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-target/debug/stone check
-pnpm --dir web typecheck && pnpm --dir web lint && pnpm --dir web test && pnpm --dir web build
-```
+7. Full checks, once at the end: `bash scripts/full-check.sh`. It adds the web checks when `web/` changed.

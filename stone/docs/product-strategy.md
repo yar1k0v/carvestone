@@ -3,7 +3,7 @@ type: doc
 title: Product strategy
 status: draft
 created: 2026-11-12T12:35:12+00:00
-generated: { by: claude-code, at: '2026-11-12T16:44:58+00:00' }
+generated: { by: claude-code, at: '2026-11-12T17:26:19+00:00' }
 description: 'What Stone works on next and why: five bets, the gap checklist with links, and the order of work.'
 links: [ADR-21, docs/feature-agent-surface, M-18, M-19]
 ---
@@ -530,3 +530,4 @@ Decision proposed to the owner: Stone owns the whole task loop, and proves it ou
 ## Notes
 
 - 2026-11-12: Owner rule (2026-11-12): no new top-level stone commands. New behavior goes into an existing command as a flag; a new command needs the owner's approval. Ceiling: 29 commands.
+- 2026-11-12: D13. Two `stone code native` processes outlived their parents and held target/debug/stone.exe, so cargo test could not relink it (os error 5). Seen 2026-11-12 during the CS-278 to CS-280 full checks.

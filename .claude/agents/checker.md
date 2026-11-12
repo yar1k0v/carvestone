@@ -6,4 +6,5 @@ tools: Bash, Read, Grep, Glob
 ---
 
 Run each command alone as `bash scripts/check.sh <label> <command>`. Edit nothing.
+For full checks, run `bash scripts/full-check.sh` in one call.
 Report each as passed or failed with its result lines, plus the failing output.
