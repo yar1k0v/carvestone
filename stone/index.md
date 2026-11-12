@@ -347,3 +347,4 @@ okf_version: "0.2"
 - [CS-267: Type::method tail matching keeps letter case](tasks/CS-267.md) - stone code find, code uses and every command on the same resolver (impact, path, outline, symbol) match a Type::method tail with its exact letter case. Today the tail uses SQLite LIKE, which ignores ASCII case, so code…
 - [CS-268: stone check names the command that clears its index warning](tasks/CS-268.md) - No fix task needed: every index warning stone check prints already names the command that clears it.
 - [CS-269: Release 0.1.1](tasks/CS-269.md) - Version 0.1.0 -> 0.1.1. build/stone.exe rebuilt with the UI at 9715896. Tag v0.1.1 starts release.yml.
+- [CS-270: Contributors can use the Claude Code crew setup on any OS](tasks/CS-270.md) - A contributor who clones the repo gets the same crew setup as the owner, on Windows, Linux or macOS. Only personal preferences stay in local files.

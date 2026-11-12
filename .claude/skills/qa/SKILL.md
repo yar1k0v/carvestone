@@ -10,7 +10,7 @@ Trust only what you see.
 
 1. From the tasks, list the user flows to try. Add one wrong-input case and one empty-store case.
 2. Run `cargo build --bin stone`. Compare the new output with `docs/agent-scratch/qa-before/`. If nothing is saved, report the new output only.
-3. For a CLI or MCP change, run each flow with `target/debug/stone.exe`. Check that:
+3. For a CLI or MCP change, run each flow with `target/debug/stone`. Check that:
    - the output answers what the user asked;
    - `--json` carries the same facts;
    - an error is one plain sentence that names the next step.

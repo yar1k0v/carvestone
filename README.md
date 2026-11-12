@@ -144,7 +144,7 @@ Full checks:
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-target/debug/stone.exe check
+target/debug/stone check
 ```
 
 When `web/` changed, also run:
@@ -155,6 +155,10 @@ pnpm --dir web lint
 pnpm --dir web test
 pnpm --dir web build
 ```
+
+### Claude Code
+
+The repo ships its Claude Code setup in `.claude/` and `CLAUDE.md`. Setup steps: [docs/contributing-with-claude.md](docs/contributing-with-claude.md).
 
 ### Releases
 

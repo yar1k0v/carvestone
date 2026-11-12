@@ -33,14 +33,14 @@
 3. Quick checks: LSP diagnostics and stone. If LSP is not enough, `checker` runs `cargo check -p <crate>`, or `pnpm --dir web typecheck` for `web/`. NEVER run clippy or a workspace build per task.
 4. NEVER fetch again what `explore` loaded. Read with offset and limit. NEVER re-read a file you edited.
 5. Edit files only with Edit and Write.
-6. On a `note:` line from stone, run `target/debug/stone.exe code native` once.
+6. On a `note:` line from stone, run `target/debug/stone code native` once.
 7. A wrong or empty stone answer is a product finding: one line under `## Notes`, then go on.
-8. Before writing library code, call `search_docs` with the version in the component's `libraries`.
+8. Before writing library code, call `search_docs` with the version in the component's `libraries`. The `docs` MCP server is optional: without it, read the library's docs page for that version (docs.rs for crates).
 9. Load deferred tools (LSP, `search_docs`) with `ToolSearch` first.
 10. Start shell commands with the program. NEVER use `cd ... &&`, `git -C` or a pipe into `head`.
 11. Use Glob, Grep and Read. NEVER use `find`, `ls`, `cat`, `grep` or `tail` in the shell.
 12. NEVER use external agents unless the owner asks.
-13. Write store items only through `target/debug/stone.exe` (`edit --note` for notes): it takes the lock. NEVER edit `stone/` with Edit, Write or sed.
+13. Write store items only through `target/debug/stone` (`edit --note` for notes): it takes the lock. NEVER edit `stone/` with Edit, Write or sed.
 
 ## Code
 
@@ -57,13 +57,13 @@
 3. The same check fails twice: stop and report.
 4. Run `pnpm --dir web build` before `cargo build --features ui` (it embeds `web/dist`).
 5. Perf and timing tests: release build, nothing else compiling.
-6. After a code change, run `cargo build --bin stone` before using `target/debug/stone.exe`.
+6. After a code change, run `cargo build --bin stone` before using `target/debug/stone`.
 7. Full checks, once at the end. Add the `pnpm` line when `web/` changed:
 
 ```bash
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-target/debug/stone.exe check
+target/debug/stone check
 pnpm --dir web typecheck && pnpm --dir web lint && pnpm --dir web test && pnpm --dir web build
 ```

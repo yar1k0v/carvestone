@@ -14,7 +14,9 @@
       "Bash(git ls-files:*)",
       "Bash(git --no-optional-locks:*)",
       "Bash(target/debug/stone.exe:*)",
-      "PowerShell(target/debug/stone.exe:*)"
+      "PowerShell(target/debug/stone.exe:*)",
+      "Bash(target/debug/stone:*)",
+      "PowerShell(target/debug/stone:*)"
     ],
     "deny": [
       "Edit(/stone/**)",
@@ -55,6 +57,7 @@
     ]
   },
   "enabledPlugins": {
-    "typescript-lsp@claude-plugins-official": true
+    "typescript-lsp@claude-plugins-official": true,
+    "rust-analyzer-lsp@claude-plugins-official": true
   }
 }

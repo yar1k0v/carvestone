@@ -15,7 +15,7 @@ Send all lookups in one message. Go back only for what the answers reveal.
 1. Callers: `code uses <name> --limit 20` for each changed signature. Add each caller's file to `paths`.
 2. Reach: `code impact <name> --depth 2` for shared code.
 3. Earlier work: `why <path>:<line>` and `precedents <id>`. Name the commit or `path#Symbol` to copy.
-4. Library behavior: `mcp__docs__search_docs`. Name the doc page in the step.
+4. Library behavior: `mcp__docs__search_docs`, or the library's docs page when that server is not connected. Name the doc page in the step.
 
 ## Write
 

@@ -111,7 +111,7 @@ if (blocked) {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
       permissionDecisionReason:
-        "stone/ and .stone/ are changed only through target/debug/stone.exe: get, list, search, new, edit, link, task, rename, delete. Run it with --help for the rest.",
+        "stone/ and .stone/ are changed only through target/debug/stone: get, list, search, new, edit, link, task, rename, delete. Run it with --help for the rest.",
     },
   }));
 }

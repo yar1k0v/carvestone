@@ -6,7 +6,7 @@ argument-hint: "[task-id or question]"
 
 # explore
 
-1. Send one message with `target/debug/stone.exe get docs/crew-profile#profile`. With a task, add `brief <id>` and `git status --short`. Raise `--budget` only when the last line says `left out`.
+1. Send one message with `target/debug/stone get docs/crew-profile#profile`. With a task, add `brief <id>` and `git status --short`. Raise `--budget` only when the last line says `left out`.
 2. For a raw task or a question, run these in order, before any Grep or Read:
    - the project: `map`;
    - the app and module: `search "<key words>" --budget 300`, `arch hld`;

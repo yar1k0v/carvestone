@@ -10,7 +10,7 @@ argument-hint: "[task-id]"
 2. Fill gaps in the same request as the Reads:
    - a definition or fields: `code outline <qualified name>`, or LSP (workspaceSymbol, then goToDefinition or hover). Never Grep a generated file;
    - callers: `code uses <name>`, or LSP findReferences;
-   - an API this repo does not already use the same way: `mcp__docs__search_docs`;
+   - an API this repo does not already use the same way: `mcp__docs__search_docs`, or the library's docs page when that server is not connected;
    - text the graph does not hold: `git grep -n "<text>" -- <dir>`. Never `grep -r`.
 3. Edit one layer per batch, in the profile's layer order: every Edit of the layer in one message, across files. Then run the layer's quick check: LSP diagnostics (`.claude/rules/crew.md#Working`).
 4. When every step is done and the quick checks are green, go to `check`.

@@ -23,7 +23,7 @@ if (looksLikeSymbol && inCode && codeFiles) {
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
-      permissionDecisionReason: `"${pattern}" looks like a symbol. Use target/debug/stone.exe code find, code uses or code outline, or the LSP tool. Grep is for plain text.`,
+      permissionDecisionReason: `"${pattern}" looks like a symbol. Use target/debug/stone code find, code uses or code outline, or the LSP tool. Grep is for plain text.`,
     },
   }));
 }
