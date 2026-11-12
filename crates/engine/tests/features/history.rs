@@ -425,6 +425,11 @@ fn errors() {
             "src/draft.rs is not tracked by git; run `git add`",
         ),
         (
+            "missing file",
+            why(&repo, "src/missing.rs", None, None).unwrap_err(),
+            "src/missing.rs does not exist; check the path",
+        ),
+        (
             "line zero",
             why(&repo, "src/orders.rs", Some(0), None).unwrap_err(),
             "lines start at 1",

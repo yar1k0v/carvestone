@@ -235,6 +235,10 @@ pub fn why(repo: &Repo, path: &str, line: Option<u32>, budget: Option<usize>) ->
     };
     let git = one.git();
     if !git.is_tracked(&inner)? {
+        // `git add` cannot help a path that is not on disk.
+        if !root.join(&path).exists() {
+            return Err(EngineError::Invalid(format!("{path} does not exist; check the path")));
+        }
         return Err(EngineError::Invalid(format!(
             "{path} is not tracked by git; run `git add`"
         )));
