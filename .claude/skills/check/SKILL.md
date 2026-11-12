@@ -7,7 +7,7 @@ description: Runs a task's acceptance commands and reports only what the output 
 
 Only output from this run counts.
 
-1. Run each acceptance command exactly as the task writes it. Run the full checks only at the end of the request (`.claude/rules/crew.md#Session flow`).
+1. Run each acceptance command exactly as the task writes it. In the main session, hand the commands to the `checker` agent. Run the full checks only at the end of the request (`.claude/rules/crew.md#Session flow`).
 2. If the change crosses a boundary, run its end-to-end tests in the final run:
    - CLI: `cargo test -p carvestone-cli --test it <topic>::`
    - MCP: `cargo test -p carvestone-cli --test it mcp_e2e::` and `cargo test -p carvestone-mcp --test it`
