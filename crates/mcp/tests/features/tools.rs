@@ -239,7 +239,13 @@ async fn errors() {
             "ready with a status",
             "list",
             json!({"ready": true, "status": "todo"}),
-            "`ready` cannot be combined with status, milestone or component",
+            "`ready` cannot be combined with status, milestone, component or open",
+        ),
+        (
+            "ready with open",
+            "list",
+            json!({"ready": true, "open": true}),
+            "`ready` cannot be combined with status, milestone, component or open",
         ),
         (
             "ready for docs",

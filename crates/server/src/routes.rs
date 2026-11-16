@@ -52,6 +52,7 @@ pub(crate) async fn list_items(
         assignee: p.assignee,
         component: p.component,
         stale: p.stale.unwrap_or(false),
+        open: false,
         ..ListFilter::default()
     };
     Ok(Json(run(&state, move |repo| repo.list(&filter)).await?))

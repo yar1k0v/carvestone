@@ -30,6 +30,14 @@ changed_files?: Array<string>,
  */
 depends_on?: Array<string>, 
 /**
+ * The components an item names, as its front matter writes them; left out when empty.
+ */
+components?: Array<string>, 
+/**
+ * The links an item names, as its front matter writes them; left out when empty.
+ */
+links?: Array<string>, 
+/**
  * The day a task or plan was created, as its front matter writes it; left out for other
  * items and when it writes none.
  */

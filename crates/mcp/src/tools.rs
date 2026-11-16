@@ -144,9 +144,12 @@ fn get_tool(repo: &Repo, args: GetArgs) -> Result<carvestone_engine::query::GetR
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct ListArgs {
     r#type: Option<String>,
+    /// One status or a comma list, e.g. todo,review.
     status: Option<String>,
     milestone: Option<String>,
     component: Option<String>,
+    /// Only items whose status is not `done` or `archived`; an item without a status stays in.
+    open: Option<bool>,
     /// With type `task`: the todo tasks whose dependencies are done, best first (5 at most).
     ready: Option<bool>,
 }
@@ -158,6 +161,7 @@ fn list_tool(repo: &Repo, args: ListArgs) -> Result<Vec<carvestone_engine::query
             status: args.status,
             milestone: args.milestone,
             component: args.component,
+            open: args.open == Some(true),
             ..ListFilter::default()
         });
     }
@@ -166,9 +170,9 @@ fn list_tool(repo: &Repo, args: ListArgs) -> Result<Vec<carvestone_engine::query
             "`ready` applies to tasks; set type to task or leave it out".into(),
         ));
     }
-    if args.status.is_some() || args.milestone.is_some() || args.component.is_some() {
+    if args.status.is_some() || args.milestone.is_some() || args.component.is_some() || args.open.is_some() {
         return Err(EngineError::Invalid(
-            "`ready` cannot be combined with status, milestone or component".into(),
+            "`ready` cannot be combined with status, milestone, component or open".into(),
         ));
     }
     repo.next(READY_LIMIT)

@@ -223,6 +223,10 @@ pub fn list_lines(rows: &[ListRow], type_known: bool, status_known: bool) -> Str
         if let Some(title) = row.title.as_deref() {
             cols.push(title);
         }
+        let components = format!("[{}]", row.components.join(", "));
+        if !row.components.is_empty() {
+            cols.push(&components);
+        }
         out.push_str(&cols.join("  "));
         out.push('\n');
     }

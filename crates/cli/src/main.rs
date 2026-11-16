@@ -501,6 +501,7 @@ struct EditArgs {
 struct ListArgs {
     #[arg(long = "type")]
     item_type: Option<String>,
+    /// One status or a comma list, e.g. todo,review.
     #[arg(long)]
     status: Option<String>,
     #[arg(long)]
@@ -510,6 +511,12 @@ struct ListArgs {
     /// Only items that need another look (docs, references and arch items).
     #[arg(long)]
     stale: bool,
+    /// Only items not done or archived.
+    #[arg(long)]
+    open: bool,
+    /// With --json: add the paths each task changed (reads git history).
+    #[arg(long)]
+    changed_files: bool,
     /// Cut the answer to about this many tokens (chars / 4); whole lines, first lines kept.
     #[arg(long)]
     budget: Option<usize>,
@@ -1017,7 +1024,8 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
                 assignee: None,
                 component: args.component,
                 stale: args.stale,
-                changed_files: cli.json,
+                changed_files: cli.json && args.changed_files,
+                open: args.open,
             };
             let (type_known, status_known) = (filter.item_type.is_some(), filter.status.is_some());
             let rows = repo.list(&filter)?;

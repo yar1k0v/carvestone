@@ -24,7 +24,7 @@ fn list_rows_carry_what_a_board_card_shows() {
     let store = Store::new();
     store.write(
         "stone/tasks/CS-1.md",
-        "---\ntype: task\ntitle: Full\nstatus: todo\ncreated: 2026-11-01\ncomponents: [arch/acme/web/ui, arch/acme/api/auth, arch/acme/api/login]\n---\n\n## Description\n\n- [x] not a criterion\n\n## Acceptance criteria\n\n- [x] one\n- [ ] two\n",
+        "---\ntype: task\ntitle: Full\nstatus: todo\ncreated: 2026-11-01\ncomponents: [arch/acme/web/ui, arch/acme/api/auth, arch/acme/api/login]\nlinks: [docs/x]\n---\n\n## Description\n\n- [x] not a criterion\n\n## Acceptance criteria\n\n- [x] one\n- [ ] two\n",
     );
     store.write(
         "stone/tasks/CS-2.md",
@@ -52,6 +52,8 @@ fn list_rows_carry_what_a_board_card_shows() {
             row.criteria_done,
             row.criteria_total,
             row.services.clone(),
+            row.components.clone(),
+            row.links.clone(),
         )
     };
     assert_eq!(
@@ -60,10 +62,53 @@ fn list_rows_carry_what_a_board_card_shows() {
             Some("2026-11-01".to_string()),
             Some(1),
             Some(2),
-            vec!["Web".to_string(), "Api".to_string()]
+            vec!["Web".to_string(), "Api".to_string()],
+            vec![
+                "arch/acme/web/ui".to_string(),
+                "arch/acme/api/auth".to_string(),
+                "arch/acme/api/login".to_string()
+            ],
+            vec!["docs/x".to_string()]
         )
     );
-    assert_eq!(facts(1), (None, None, None, Vec::new()));
+    assert_eq!(facts(1), (None, None, None, Vec::new(), Vec::new(), Vec::new()));
+}
+
+#[test]
+fn list_filters_status_lists_and_open() {
+    let store = Store::new();
+    for (n, status) in [(1, "todo"), (2, "review"), (3, "done"), (4, "archived")] {
+        store.write(
+            &format!("stone/tasks/CS-{n}.md"),
+            &format!("---\ntype: task\ntitle: T{n}\nstatus: {status}\n---\n"),
+        );
+    }
+    store.write("stone/tasks/CS-5.md", "---\ntype: task\ntitle: T5\n---\n");
+
+    let short_ids = |status: Option<&str>, open: bool| {
+        let filter = ListFilter {
+            item_type: Some("task".to_string()),
+            status: status.map(str::to_string),
+            open,
+            ..ListFilter::default()
+        };
+        let rows = store.repo().list(&filter).unwrap();
+        rows.iter().map(|row| row.short.clone().unwrap()).collect::<Vec<_>>()
+    };
+    let cases: [(&str, Option<&str>, bool, &[&str]); 4] = [
+        ("a comma list", Some("todo,review"), false, &["CS-1", "CS-2"]),
+        (
+            "blanks and empty parts",
+            Some("todo, ,review"),
+            false,
+            &["CS-1", "CS-2"],
+        ),
+        ("open", None, true, &["CS-1", "CS-2", "CS-5"]),
+        ("open with a finished status", Some("done"), true, &[]),
+    ];
+    for (name, status, open, want) in cases {
+        assert_eq!(short_ids(status, open), want, "{name}");
+    }
 }
 
 #[test]

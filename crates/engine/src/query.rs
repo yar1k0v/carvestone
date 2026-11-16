@@ -25,6 +25,8 @@ pub struct ListFilter {
     pub stale: bool,
     /// Fill `changed_files` on task rows; it reads the git cache, so plain lists leave it off.
     pub changed_files: bool,
+    /// Only items whose status is not `done` or `archived`; an item without a status stays in.
+    pub open: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -64,6 +66,14 @@ pub struct ListRow {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[cfg_attr(feature = "ts", ts(as = "Option<Vec<String>>", optional))]
     pub depends_on: Vec<String>,
+    /// The components an item names, as its front matter writes them; left out when empty.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<Vec<String>>", optional))]
+    pub components: Vec<String>,
+    /// The links an item names, as its front matter writes them; left out when empty.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<Vec<String>>", optional))]
+    pub links: Vec<String>,
     /// The day a task or plan was created, as its front matter writes it; left out for other
     /// items and when it writes none.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -324,6 +334,10 @@ impl Repo {
         let scheme = &snapshot.scheme;
         let milestone = filter.milestone.as_deref().map(|m| canon(scheme, m));
         let component = filter.component.as_deref().map(|c| canon(scheme, c));
+        let statuses: Option<Vec<&str>> = filter
+            .status
+            .as_deref()
+            .map(|list| list.split(',').map(str::trim).filter(|part| !part.is_empty()).collect());
 
         let stale: Option<HashSet<String>> = if filter.stale {
             Some(
@@ -366,7 +380,12 @@ impl Repo {
             if stale.as_ref().is_some_and(|ids| !ids.contains(entry.id.as_str())) {
                 continue;
             }
-            if filter.status.as_ref().is_some_and(|s| f.status.as_ref() != Some(s)) {
+            if let Some(wanted) = &statuses
+                && !f.status.as_deref().is_some_and(|s| wanted.contains(&s))
+            {
+                continue;
+            }
+            if filter.open && matches!(f.status.as_deref(), Some("done" | "archived")) {
                 continue;
             }
             if let Some(m) = &milestone
@@ -428,6 +447,8 @@ impl Repo {
                     etag: etag_of(&entry.text),
                     changed_files,
                     depends_on: f.depends_on.clone(),
+                    components: f.components.clone(),
+                    links: f.links.clone(),
                     created: if is_task || ty == ItemType::Plan {
                         f.created.clone()
                     } else {
