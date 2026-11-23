@@ -365,11 +365,6 @@ fn errors() {
             (&["history", "nope"], 1, "✗ nope not found"),
             (&["code", "explain", "arch/nope"], 1, "✗ arch/nope not found"),
             (
-                &["brief", "docs/guide"],
-                1,
-                "✗ docs/guide is not a task; give a task id, for example CS-12",
-            ),
-            (
                 &["why", "src/util.rs"],
                 1,
                 "✗ src/util.rs is not under git; run `git init` in its folder or list the folder in code_roots",

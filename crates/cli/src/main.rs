@@ -88,11 +88,11 @@ enum Command {
         #[arg(long)]
         budget: Option<usize>,
     },
-    /// Everything a task needs to start, in one answer: the task, its links, entry points, outlines and precedents.
+    /// Everything a task or a doc needs, in one answer: the item, its links and backlinks, entry points, outlines and finished tasks.
     Brief {
-        /// The task id.
-        task: String,
-        /// Aim for about this many tokens instead of 2,000; the task and its links are never cut.
+        /// A task, doc, decision, plan or architecture id.
+        id: String,
+        /// Aim for about this many tokens instead of 2,000; the item and its links are never cut.
         #[arg(long)]
         budget: Option<usize>,
     },
@@ -1015,8 +1015,8 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             let text = render_get(&repo.get(&id)?, cli.json)?;
             print!("{}", lean::fit_lines(if cli.json { None } else { budget }, &text));
         }
-        Command::Brief { task, budget } => {
-            let found = brief::brief(&repo, &task)?;
+        Command::Brief { id, budget } => {
+            let found = brief::brief(&repo, &id)?;
             if cli.json {
                 print!("{}", pretty(&found)?);
             } else {

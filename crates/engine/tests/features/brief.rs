@@ -6,7 +6,7 @@ use carvestone_engine::tiers::{Part, Tier, fit};
 
 use crate::support::Store;
 
-const TASK: &str = "---\ntype: task\ntitle: Ship\nstatus: todo\nlinks: [ADR-1]\ncomponents: [arch/api]\npaths: [src/a.rs, docs/notes.md]\n---\n\n## Description\n\nDo the thing, see [[docs/guide#setup]].\n\n## Acceptance criteria\n\n- [ ] first criterion\n- [ ] second criterion\n\n## Plan\n\n1. first step\n2. second step\n";
+const TASK: &str = "---\ntype: task\ntitle: Ship\nstatus: todo\nlinks: [ADR-1, docs/feature]\ncomponents: [arch/api]\npaths: [src/a.rs, docs/notes.md]\n---\n\n## Description\n\nDo the thing, see [[docs/guide#setup]].\n\n## Acceptance criteria\n\n- [ ] first criterion\n- [ ] second criterion\n\n## Plan\n\n1. first step\n2. second step\n";
 const BARE: &str = "---\ntype: task\ntitle: Bare\nstatus: todo\n---\n\n## Description\n\nJust text.\n\n## Acceptance criteria\n\n- [ ] only criterion\n";
 
 fn store() -> Store {
@@ -24,6 +24,10 @@ fn store() -> Store {
         &format!("---\ntype: doc\ntitle: Guide\n---\n\n## Setup\n\n{setup}"),
     );
     store.write("stone/arch/api.md", "---\ntype: system\ntitle: Api\n---\n");
+    store.write(
+        "stone/docs/feature.md",
+        "---\ntype: doc\ntitle: Feature\nlinks: [ADR-1, arch/api]\n---\n\nWhat the feature does.\n",
+    );
     store
 }
 
@@ -77,8 +81,12 @@ fn a_brief_holds_the_task_whole_and_its_links_by_tier() {
 
     // Links print in file order: relation fields first, then the body.
     let links = part(&found.parts, "links");
-    assert_eq!(links.lines.len(), 3);
-    for (line, start) in links.lines.iter().zip(["ADR-1  ", "arch/api  ", "docs/guide  "]) {
+    assert_eq!(links.lines.len(), 4);
+    for (line, start) in links
+        .lines
+        .iter()
+        .zip(["ADR-1  ", "docs/feature  ", "arch/api  ", "docs/guide  "])
+    {
         assert!(line.starts_with(start) && line.ends_with(" tokens"), "{line}");
     }
     let decision = part(&found.parts, "ADR-1#decision").lines.join("\n");
@@ -145,13 +153,34 @@ fn a_brief_lists_the_plan_targets_with_their_lines() {
 }
 
 #[test]
-fn a_brief_refuses_what_is_not_a_task() {
+fn an_item_brief_holds_its_links_backlinks_and_code() {
     let store = store();
     let repo = store.repo();
-    for id in ["ADR-1", "arch/api"] {
-        let error = brief(&repo, id).unwrap_err();
-        assert!(error.to_string().contains("is not a task"), "{id}: {error}");
-    }
+    let found = brief(&repo, "docs/feature").unwrap();
+    assert_eq!(found.task, "docs/feature");
+
+    let names: Vec<&str> = found.parts.iter().map(|part| part.name.as_str()).collect();
+    assert_eq!(
+        names,
+        ["item", "links", "linked from", "ADR-1#decision", "entry points"]
+    );
+    assert_eq!(part(&found.parts, "item").tier, Tier::Critical);
+    assert_eq!(part(&found.parts, "links").tier, Tier::Critical);
+
+    assert!(part(&found.parts, "item").lines[0].starts_with("docs/feature  Feature"));
+    let from = part(&found.parts, "linked from");
+    assert!(
+        from.lines.iter().any(|line| line.starts_with("CS-1")),
+        "{:?}",
+        from.lines
+    );
+    assert!(from.lines.iter().all(|line| !line.starts_with("docs/feature")));
+}
+
+#[test]
+fn a_brief_refuses_an_unknown_id() {
+    let store = store();
+    let repo = store.repo();
     assert!(matches!(
         brief(&repo, "CS-99").unwrap_err(),
         EngineError::NotFound { .. }

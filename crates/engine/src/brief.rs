@@ -1,7 +1,8 @@
-//! `stone brief`: a task, its links, entry points, outlines and precedents in one answer.
+//! `stone brief`: a task, its links, entry points, outlines and precedents in one answer; for a
+//! doc, decision, plan or architecture item, its links, backlinks, entry points and finished tasks.
 //!
-//! The engine builds the parts; the adapters cut them with [`crate::tiers::fit`]. The task and
-//! its links are critical, everything else shrinks to fit.
+//! The engine builds the parts; the adapters cut them with [`crate::tiers::fit`]. The task (or
+//! item) and its links are critical, everything else shrinks to fit.
 
 use std::collections::{HashMap, HashSet};
 
@@ -18,7 +19,9 @@ use crate::precedents::{Lookup, is_task, precedents};
 use crate::ready::{path_of, plan_lines, plan_spans};
 use crate::repo::{EngineError, Repo};
 use crate::resolve::Snapshot;
+use crate::stale::staleness_in;
 use crate::tiers::{Part, tokens};
+use crate::timeline::Date;
 
 /// Tokens a brief aims for when --budget is absent.
 pub const DEFAULT_BUDGET: usize = 2000;
@@ -26,6 +29,8 @@ pub const DEFAULT_BUDGET: usize = 2000;
 const ENTRIES_PER_COMPONENT: usize = 10;
 /// Precedent lines listed.
 const PRECEDENTS_SHOWN: usize = 3;
+/// Finished tasks listed in the brief of a doc, decision, plan or architecture item.
+const PRECEDENTS_SHOWN_ITEM: usize = 5;
 /// The task sections the brief prints whole, as anchor and title.
 const TASK_SECTIONS: [(&str, &str); 3] = [
     ("description", "Description"),
@@ -37,7 +42,7 @@ const LINK_KINDS: [&str; 3] = ["links", "components", "wikilink"];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Brief {
-    /// The label of the task, such as `CS-12`.
+    /// The label of the item the brief is about, such as `CS-12` or `docs/feature`.
     pub task: String,
     pub parts: Vec<Part>,
 }
@@ -47,10 +52,7 @@ pub fn brief(repo: &Repo, task: &str) -> Result<Brief, EngineError> {
     let snapshot = repo.snapshot()?;
     let (entry, _) = snapshot.resolve(task)?;
     let Some(item) = entry.item.as_ref().filter(|_| is_task(entry)) else {
-        return Err(EngineError::Invalid(format!(
-            "{} is not a task; give a task id, for example CS-12",
-            snapshot.label(entry)
-        )));
+        return item_brief(repo, &snapshot, entry);
     };
     let label = snapshot.label(entry);
 
@@ -58,23 +60,7 @@ pub fn brief(repo: &Repo, task: &str) -> Result<Brief, EngineError> {
     parts.extend(targets_part(repo, item));
     let linked = linked_items(repo, &snapshot, entry);
     if !linked.is_empty() {
-        let lines = linked
-            .iter()
-            .map(|link| match link.target {
-                Some(target) => {
-                    let body = target.item.as_ref().map_or("", |item| item.body.as_str());
-                    let title = target.item.as_ref().and_then(|item| item.fields.title.as_deref());
-                    format!(
-                        "{}  {}  about {} tokens",
-                        snapshot.label(target),
-                        title.unwrap_or(""),
-                        tokens(body)
-                    )
-                }
-                None => format!("{}  not found; run stone check", link.written),
-            })
-            .collect();
-        let mut part = Part::critical("links", lines);
+        let mut part = Part::critical("links", link_lines(&snapshot, &linked));
         part.heading = Some("Links:".to_string());
         parts.push(part);
     }
@@ -108,6 +94,151 @@ pub fn brief(repo: &Repo, task: &str) -> Result<Brief, EngineError> {
         parts.push(part);
     }
     Ok(Brief { task: label, parts })
+}
+
+/// What a doc, decision, plan or architecture item holds together: itself, what it links to,
+/// what links to it, the entry points of its components and finished tasks on them.
+fn item_brief(repo: &Repo, snapshot: &Snapshot, entry: &Entry) -> Result<Brief, EngineError> {
+    let label = snapshot.label(entry);
+    let today = Date::today();
+    let stale_of = |id: &str| staleness_in(repo, snapshot, id, today).ok().flatten();
+
+    let mut lines = vec![item_line(&label, entry)];
+    if let Some(description) = entry.item.as_ref().and_then(|item| item.fields.description.as_deref()) {
+        lines.extend(text_lines(description));
+    }
+    if let Some(stale) = stale_of(&label) {
+        lines.push(format!("stale: {}", stale.reason));
+    }
+    let mut parts = vec![Part::critical("item", lines)];
+
+    let linked = linked_items(repo, snapshot, entry);
+    if !linked.is_empty() {
+        let lines = link_lines(snapshot, &linked)
+            .into_iter()
+            .zip(&linked)
+            .map(|(line, link)| match link.target {
+                Some(target) if stale_of(&snapshot.label(target)).is_some() => format!("{line}  stale"),
+                _ => line,
+            })
+            .collect();
+        let mut part = Part::critical("links", lines);
+        part.heading = Some("Links:".to_string());
+        parts.push(part);
+    }
+
+    let (sources, source_labels) = backlink_lines(repo, snapshot, entry);
+    if !sources.is_empty() {
+        parts.push(Part::optional("linked from", Some("Linked from:"), sources));
+    }
+    for link in &linked {
+        if let Some(part) = section_part(snapshot, link) {
+            parts.push(part);
+        }
+    }
+
+    let mut components: Vec<String> = Vec::new();
+    let mut add = |id: String| {
+        if !components.contains(&id) {
+            components.push(id);
+        }
+    };
+    if entry.item.as_ref().is_some_and(|item| is_arch(item.item_type())) {
+        add(label.clone());
+    }
+    for id in entry.item.iter().flat_map(|item| &item.fields.components) {
+        add(id.clone());
+    }
+    for target in linked.iter().filter_map(|link| link.target) {
+        if target.item.as_ref().is_some_and(|item| is_arch(item.item_type())) {
+            add(snapshot.label(target));
+        }
+    }
+    if !components.is_empty() {
+        let lines = components.iter().flat_map(|id| entry_lines(repo, id)).collect();
+        parts.push(Part::optional("entry points", Some("Entry points:"), lines));
+    }
+
+    let mut seen = HashSet::new();
+    let mut finished = Vec::new();
+    for id in &components {
+        let lookup = Lookup {
+            component: Some(id.clone()),
+            limit: Some(PRECEDENTS_SHOWN_ITEM),
+            ..Lookup::default()
+        };
+        let Ok(found) = precedents(repo, &lookup) else {
+            continue;
+        };
+        for hit in found.hits {
+            if !source_labels.contains(&hit.id) && seen.insert(hit.id.clone()) {
+                finished.push(hit.line());
+            }
+        }
+    }
+    finished.truncate(PRECEDENTS_SHOWN_ITEM);
+    if !finished.is_empty() {
+        parts.push(Part::optional("finished tasks", Some("Finished tasks:"), finished));
+    }
+    Ok(Brief { task: label, parts })
+}
+
+/// `<label>  <title>  <status>` of one item.
+fn item_line(label: &str, entry: &Entry) -> String {
+    let fields = entry.item.as_ref().map(|item| &item.fields);
+    format!(
+        "{label}  {}  {}",
+        fields.and_then(|f| f.title.as_deref()).unwrap_or(""),
+        fields.and_then(|f| f.status.as_deref()).unwrap_or("")
+    )
+}
+
+/// One line per item that links to `entry`, tasks first, each group in id order, and the labels.
+fn backlink_lines(repo: &Repo, snapshot: &Snapshot, entry: &Entry) -> (Vec<String>, HashSet<String>) {
+    let found = match repo.backlinks(entry.id.as_str(), None) {
+        Ok(found) => found,
+        Err(error) => return (vec![format!("not available: {}", one_line(&error))], HashSet::new()),
+    };
+    let mut seen = HashSet::new();
+    let (mut tasks, mut rest) = (Vec::new(), Vec::new());
+    for link in found {
+        let Ok((source, _)) = snapshot.resolve(&link.id) else {
+            continue;
+        };
+        if source.id == entry.id || !seen.insert(source.id.as_str().to_string()) {
+            continue;
+        }
+        let label = snapshot.label(source);
+        let line = item_line(&label, source);
+        if is_task(source) {
+            tasks.push((label, line));
+        } else {
+            rest.push((label, line));
+        }
+    }
+    tasks.append(&mut rest);
+    let labels = tasks.iter().map(|(label, _)| label.clone()).collect();
+    (tasks.into_iter().map(|(_, line)| line).collect(), labels)
+}
+
+/// One line per linked item: label, title and size; a link that resolves to nothing says so.
+fn link_lines(snapshot: &Snapshot, linked: &[Linked]) -> Vec<String> {
+    linked
+        .iter()
+        .map(|link| match link.target {
+            Some(target) => {
+                let body = target.item.as_ref().map_or("", |item| item.body.as_str());
+                let title = target.item.as_ref().and_then(|item| item.fields.title.as_deref());
+                format!(
+                    "{}  {}  about {} tokens",
+                    snapshot.label(target),
+                    title.unwrap_or(""),
+                    tokens(body)
+                )
+            }
+            None => format!("{}  not found; run stone check", link.written),
+        })
+        .collect()
 }
 
 /// One item the task links to, with the anchor the link names.
