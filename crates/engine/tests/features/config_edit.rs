@@ -6,6 +6,7 @@ use crate::support::Store;
 #[derive(Clone, Copy)]
 enum Act {
     Root(&'static str),
+    Doc(&'static str),
     Scip(&'static str, &'static str, &'static [&'static str]),
 }
 
@@ -17,6 +18,7 @@ fn run(
     let repo = store.repo();
     match act {
         Act::Root(path) => repo.add_code_root(path, dry_run),
+        Act::Doc(path) => repo.add_doc_root(path, dry_run),
         Act::Scip(file, language, extensions) => {
             let extensions: Vec<String> = extensions.iter().map(|e| e.to_string()).collect();
             repo.add_scip_index(file, language, &extensions, dry_run)
@@ -26,7 +28,7 @@ fn run(
 
 #[test]
 fn an_entry_is_added_to_the_text_and_a_repeat_changes_nothing() {
-    use Act::{Root, Scip};
+    use Act::{Doc, Root, Scip};
     let java = Scip(".scip/java.scip", "java", &["java", "kt"]);
     let rows: &[(&str, &str, Act, &str)] = &[
         (
@@ -90,6 +92,24 @@ fn an_entry_is_added_to_the_text_and_a_repeat_changes_nothing() {
             "code_roots:\r\n  - a\r\n  - b\r\nproject: t\r\n",
         ),
         (
+            "doc key missing",
+            "project: t\n",
+            Doc("docs/"),
+            "project: t\ndoc_roots:\n  - docs/\n",
+        ),
+        (
+            "doc block list beside code_roots",
+            "code_roots:\n  - src\ndoc_roots:\n  - specs\n",
+            Doc("docs"),
+            "code_roots:\n  - src\ndoc_roots:\n  - specs\n  - docs\n",
+        ),
+        (
+            "doc CRLF",
+            "project: t\r\n",
+            Doc("docs/"),
+            "project: t\r\ndoc_roots:\r\n  - docs/\r\n",
+        ),
+        (
             "scip key missing",
             "project: t\n",
             java,
@@ -134,8 +154,20 @@ fn an_entry_is_added_to_the_text_and_a_repeat_changes_nothing() {
 }
 
 #[test]
+fn a_doc_root_listed_under_another_spelling_changes_nothing() {
+    let store = Store::new();
+    let start = "doc_roots:\n  - docs/\n";
+    store.write("stone/config.yml", start);
+    for spelling in ["docs", "./docs", "docs/", "docs\\"] {
+        let done = run(&store, Act::Doc(spelling), false).unwrap_or_else(|e| panic!("{spelling}: {e}"));
+        assert!(!done.changed, "{spelling}: reported a change");
+        assert_eq!(store.read("stone/config.yml"), start, "{spelling}: file");
+    }
+}
+
+#[test]
 fn a_wrong_entry_is_refused_and_the_file_stays() {
-    use Act::{Root, Scip};
+    use Act::{Doc, Root, Scip};
     let go = "scip_indexes:\n  - file: a.scip\n    language: go\n    extensions: [go]\n";
     let rows: &[(&str, &str, Act, &str)] = &[
         ("empty root", "project: t\n", Root("  "), "name a folder"),
@@ -143,6 +175,10 @@ fn a_wrong_entry_is_refused_and_the_file_stays() {
         ("drive root", "project: t\n", Root("C:/x"), "inside the repo"),
         ("parent root", "project: t\n", Root("a/../../b"), "inside the repo"),
         ("a root with a line break", "project: t\n", Root("a\nb"), "read back"),
+        ("empty doc root", "project: t\n", Doc("  "), "doc_roots"),
+        ("parent doc root", "project: t\n", Doc("../x"), "doc_roots"),
+        ("doc root inside stone", "project: t\n", Doc("stone/"), "doc_roots"),
+        ("doc root is the repo root", "project: t\n", Doc("."), "doc_roots"),
         (
             "scalar value",
             "code_roots: ~\n",

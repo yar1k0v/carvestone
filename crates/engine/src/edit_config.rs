@@ -1,6 +1,6 @@
-//! `stone config add-code-root` and `stone config add-scip-index`.
+//! `stone config add-code-root`, `stone config add-doc-root` and `stone config add-scip-index`.
 //!
-//! Both edit the raw text of `stone/config.yml`, never a re-serialized copy, so its comments, its
+//! All edit the raw text of `stone/config.yml`, never a re-serialized copy, so its comments, its
 //! other lines and its line ending stay. Config holds data only: no command is ever written here.
 
 use carvestone_store::config::ScipIndexEntry;
@@ -17,6 +17,7 @@ const CONFIG_FILE: &str = "stone/config.yml";
 #[derive(Clone, Copy)]
 enum Entry<'a> {
     Root(&'a str),
+    Doc(&'a str),
     Scip(&'a ScipIndexEntry),
 }
 
@@ -24,6 +25,7 @@ impl Entry<'_> {
     fn key(self) -> &'static str {
         match self {
             Entry::Root(_) => "code_roots",
+            Entry::Doc(_) => "doc_roots",
             Entry::Scip(_) => "scip_indexes",
         }
     }
@@ -33,6 +35,7 @@ impl Entry<'_> {
         let mut config = old.clone();
         match self {
             Entry::Root(path) => config.code_roots.push(path.to_string()),
+            Entry::Doc(path) => config.doc_roots.push(path.to_string()),
             Entry::Scip(entry) => config.scip_indexes.push(entry.clone()),
         }
         config
@@ -41,7 +44,7 @@ impl Entry<'_> {
     /// The lines of the entry in a block list whose dashes sit after `indent`.
     fn lines(self, indent: &str, eol: &str) -> Vec<String> {
         match self {
-            Entry::Root(path) => vec![format!("{indent}- {}{eol}", scalar(path))],
+            Entry::Root(path) | Entry::Doc(path) => vec![format!("{indent}- {}{eol}", scalar(path))],
             Entry::Scip(entry) => vec![
                 format!("{indent}- file: {}{eol}", scalar(&entry.file)),
                 format!("{indent}  language: {}{eol}", scalar(&entry.language)),
@@ -70,6 +73,21 @@ impl Repo {
                 return Ok(None);
             }
             add_entry(old, &config, Entry::Root(path)).map(Some)
+        })
+    }
+
+    /// Adds `path` to `doc_roots` in `stone/config.yml`. A folder already listed, in any spelling
+    /// that names the same folder, changes nothing. `Config::parse` refuses a bad path before a save.
+    pub fn add_doc_root(&self, path: &str, dry_run: bool) -> Result<Written, EngineError> {
+        let path = path.trim();
+        self.edit_config(dry_run, |old| {
+            let config = Config::parse(old)?;
+            let folder = path.replace('\\', "/");
+            let folder = folder.strip_prefix("./").unwrap_or(&folder).trim_end_matches('/');
+            if config.doc_folders().iter().any(|held| held == folder) {
+                return Ok(None);
+            }
+            add_entry(old, &config, Entry::Doc(path)).map(Some)
         })
     }
 
@@ -174,7 +192,7 @@ fn add_entry(old: &str, config: &Config, entry: Entry<'_>) -> Result<String, Eng
             let body = body_of(&lines[line]).to_string();
             let end = terminator_of(&lines[line]).to_string();
             match entry {
-                Entry::Root(path) => {
+                Entry::Root(path) | Entry::Doc(path) => {
                     // The new item goes in front of the closing bracket; the rest of the line stays.
                     let head = body[..close].trim_end();
                     let sep = if head.ends_with('[') { "" } else { ", " };

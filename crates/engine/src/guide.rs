@@ -256,6 +256,7 @@ pub const CLI_NESTED: &[(&str, &str)] = &[
     ("task", "fill-closed"),
     ("task", "remove"),
     ("config", "add-code-root"),
+    ("config", "add-doc-root"),
     ("config", "add-scip-index"),
     ("config", "merge-driver"),
 ];

@@ -344,6 +344,14 @@ enum ConfigCommand {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Add a folder of plain docs to `doc_roots`, such as `docs/`.
+    AddDocRoot {
+        /// A folder below the repo root, outside stone/.
+        path: String,
+        /// Print the resulting file and write nothing.
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Add a SCIP index file to `scip_indexes`. Config holds data only: you build the index yourself.
     AddScipIndex {
         /// The index file, relative to the repo root, such as `.scip/java.scip`.
@@ -1181,6 +1189,11 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             command: ConfigCommand::AddCodeRoot { path, dry_run },
         } => {
             show(&repo.add_code_root(&path, dry_run)?, Shown::Edited, dry_run, cli.json)?;
+        }
+        Command::Config {
+            command: ConfigCommand::AddDocRoot { path, dry_run },
+        } => {
+            show(&repo.add_doc_root(&path, dry_run)?, Shown::Edited, dry_run, cli.json)?;
         }
         Command::Config {
             command:
