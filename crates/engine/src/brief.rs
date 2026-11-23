@@ -4,7 +4,7 @@
 //! The engine builds the parts; the adapters cut them with [`crate::tiers::fit`]. The task (or
 //! item) and its links are critical, everything else shrinks to fit.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use carvestone_core::{Section, section_text, sections};
 use carvestone_store::Entry;
@@ -15,7 +15,7 @@ use crate::code::{CodeQuery, OutlineEntry, open, outline};
 use crate::code_entries::{EntryState, entries, entry_state};
 use crate::design::span_target;
 use crate::links::{LinkContext, links_of};
-use crate::precedents::{Lookup, is_task, precedents};
+use crate::precedents::{Lookup, Precedent, STOP_WORDS, is_task, precedents, title_words};
 use crate::ready::{path_of, plan_lines, plan_spans};
 use crate::repo::{EngineError, Repo};
 use crate::resolve::Snapshot;
@@ -31,6 +31,8 @@ const ENTRIES_PER_COMPONENT: usize = 10;
 const PRECEDENTS_SHOWN: usize = 3;
 /// Finished tasks listed in the brief of a doc, decision, plan or architecture item.
 const PRECEDENTS_SHOWN_ITEM: usize = 5;
+/// Finished tasks asked for per component before the word filter picks the ones shown.
+const FINISHED_CANDIDATES: usize = 50;
 /// The task sections the brief prints whole, as anchor and title.
 const TASK_SECTIONS: [(&str, &str); 3] = [
     ("description", "Description"),
@@ -160,27 +162,77 @@ fn item_brief(repo: &Repo, snapshot: &Snapshot, entry: &Entry) -> Result<Brief, 
     }
 
     let mut seen = HashSet::new();
-    let mut finished = Vec::new();
+    let mut candidates = Vec::new();
     for id in &components {
         let lookup = Lookup {
             component: Some(id.clone()),
-            limit: Some(PRECEDENTS_SHOWN_ITEM),
+            limit: Some(FINISHED_CANDIDATES),
             ..Lookup::default()
         };
         let Ok(found) = precedents(repo, &lookup) else {
             continue;
         };
         for hit in found.hits {
-            if !source_labels.contains(&hit.id) && seen.insert(hit.id.clone()) {
-                finished.push(hit.line());
+            if seen.insert(hit.id.clone()) {
+                let words = snapshot
+                    .resolve(&hit.id)
+                    .map(|(task, _)| title_words(task).iter().map(|w| stem(w)).collect())
+                    .unwrap_or_default();
+                candidates.push((hit, words));
             }
         }
     }
-    finished.truncate(PRECEDENTS_SHOWN_ITEM);
+    let finished: Vec<String> = by_words(&item_words(entry), candidates)
+        .into_iter()
+        .filter(|hit| !source_labels.contains(&hit.id))
+        .take(PRECEDENTS_SHOWN_ITEM)
+        .map(|hit| hit.line())
+        .collect();
     if !finished.is_empty() {
         parts.push(Part::optional("finished tasks", Some("Finished tasks:"), finished));
     }
     Ok(Brief { task: label, parts })
+}
+
+/// The words of an item's title and description, stemmed, that say what it is about.
+fn item_words(entry: &Entry) -> BTreeSet<String> {
+    let Some(item) = entry.item.as_ref() else {
+        return BTreeSet::new();
+    };
+    let text = format!(
+        "{} {}",
+        item.fields.title.as_deref().unwrap_or(""),
+        item.fields.description.as_deref().unwrap_or("")
+    );
+    text.split(|c: char| !c.is_alphanumeric())
+        .map(str::to_lowercase)
+        .filter(|w| w.chars().count() >= 4 && !STOP_WORDS.contains(&w.as_str()))
+        .map(|w| stem(&w))
+        .collect()
+}
+
+/// A plural without its `s`, so `violations` meets `violation`. Short words stay as they are.
+fn stem(word: &str) -> String {
+    match word.strip_suffix('s') {
+        Some(root) if word.chars().count() >= 5 => root.to_string(),
+        _ => word.to_string(),
+    }
+}
+
+/// The finished tasks whose title shares a word with `words`, the most shared first.
+fn by_words(words: &BTreeSet<String>, found: Vec<(Precedent, BTreeSet<String>)>) -> Vec<Precedent> {
+    let mut kept: Vec<(usize, Precedent)> = Vec::new();
+    for (mut hit, theirs) in found {
+        let shared: Vec<&String> = words.intersection(&theirs).collect();
+        if shared.is_empty() {
+            continue;
+        }
+        let shown: Vec<&str> = shared.iter().take(3).map(|w| w.as_str()).collect();
+        hit.matched.push(format!("words {}", shown.join(" ")));
+        kept.push((shared.len(), hit));
+    }
+    kept.sort_by_key(|(count, _)| std::cmp::Reverse(*count));
+    kept.into_iter().map(|(_, hit)| hit).collect()
 }
 
 /// `<label>  <title>  <status>` of one item.
@@ -452,4 +504,60 @@ fn precedents_part(repo: &Repo, label: &str) -> Option<Part> {
 /// An error on one line, so a cut by lines never splits it.
 fn one_line(error: &EngineError) -> String {
     error.to_string().split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hit(id: &str, title: &str) -> (Precedent, BTreeSet<String>) {
+        let precedent = Precedent {
+            id: id.to_string(),
+            title: Some(title.to_string()),
+            score: 0,
+            matched: vec!["component arch/x".to_string()],
+            files: Vec::new(),
+            more_files: 0,
+        };
+        let words = title
+            .split(|c: char| !c.is_alphanumeric())
+            .map(str::to_lowercase)
+            .filter(|w| w.chars().count() >= 4)
+            .map(|w| stem(&w))
+            .collect();
+        (precedent, words)
+    }
+
+    fn set(words: &[&str]) -> BTreeSet<String> {
+        words.iter().map(|w| w.to_string()).collect()
+    }
+
+    #[test]
+    fn by_words_keeps_only_tasks_that_share_a_word() {
+        // (a) a task that shares a word is kept and says which.
+        let kept = by_words(
+            &set(&["violation"]),
+            vec![hit("CS-1", "Violation rules for night driving")],
+        );
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].matched, vec!["component arch/x", "words violation"]);
+
+        // (b) a task on the same component with no shared word is dropped.
+        let kept = by_words(&set(&["violation"]), vec![hit("CS-2", "portal README uses port 3001")]);
+        assert!(kept.is_empty());
+
+        // (c) two kept tasks: the one sharing two words comes first.
+        let kept = by_words(
+            &set(&["violation", "night"]),
+            vec![hit("CS-3", "Violation list"), hit("CS-4", "Night violations report")],
+        );
+        let ids: Vec<&str> = kept.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, ["CS-4", "CS-3"]);
+
+        // (d) the stem drops a plural `s` from words of 5 or more chars only.
+        assert_eq!(stem("violations"), "violation");
+        assert_eq!(stem("rules"), "rule");
+        assert_eq!(stem("uses"), "uses");
+        assert_eq!(stem("bus"), "bus");
+    }
 }

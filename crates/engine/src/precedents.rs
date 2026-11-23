@@ -38,7 +38,7 @@ const COMPONENT_POINTS: u32 = 3;
 const SHAPE_POINTS: u32 = 2;
 const FOLDER_POINTS: u32 = 1;
 /// Words too common in task titles to say anything about the change.
-const STOP_WORDS: [&str; 10] = [
+pub(crate) const STOP_WORDS: [&str; 10] = [
     "this", "that", "with", "from", "into", "when", "then", "than", "task", "tasks",
 ];
 
@@ -479,7 +479,7 @@ fn nested(a: &str, b: &str) -> bool {
     a == b || a.starts_with(&format!("{b}/")) || b.starts_with(&format!("{a}/"))
 }
 
-fn title_words(entry: &Entry) -> BTreeSet<String> {
+pub(crate) fn title_words(entry: &Entry) -> BTreeSet<String> {
     let title = entry
         .item
         .as_ref()
