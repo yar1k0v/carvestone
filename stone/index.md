@@ -97,6 +97,7 @@ okf_version: "0.2"
 - [M-18: Agent-first read surface](milestones/M-18.md) - An agent gets the context of its task in one or two calls, and trusts the answer. Done when the three stages of ADR-21 are in place and measured.
 - [M-19: Code health after M-18](milestones/M-19.md)
 - [M-20: Store merges without conflicts](milestones/M-20.md)
+- [M-21: Languages installed on demand](milestones/M-21.md)
 - [M-22: Schemas, infra and agent hooks](milestones/M-22.md) - Agents find SQL tables, Terraform resources and config keys through stone, and Claude Code points agents at stone before a raw Read or Grep.
 
 # Tasks
@@ -363,10 +364,12 @@ okf_version: "0.2"
 - [CS-279: close writes the criteria, outcome and review status in one stone edit](tasks/CS-279.md) - The close skill closes a task with one stone edit call: tick the criteria, write the outcome and set status=review together. Today it sends 4+ store writes.
 - [CS-280: scripts/full-check.sh runs the full checks in one call](tasks/CS-280.md) - The full checks run in one call: scripts/full-check.sh runs fmt, clippy, tests, the stone build and stone check through scripts/check.sh, stops at the first failure, and adds the web checks when web/ changed.
 - [CS-281: Commits stage only the task's own hunks when sessions share a tree](tasks/CS-281.md) - Two sessions can work in one tree. A commit must hold only its task's changes, so another session's work never lands in it.
+- [CS-282: Trial: a WebAssembly C# grammar parses inside stone, and wasmtime's size cost is known](tasks/CS-282.md) - Before stone loads grammars on demand as WebAssembly files, the owner learns what it costs: the binary size wasmtime adds against the native C# grammar it replaces, and the parse speed. Trial only, off by default…
 - [CS-283: Tables, views and foreign keys from .sql files are in the code graph](tasks/CS-283.md) - Agents and people find SQL tables, views and functions with stone code find, and stone code uses <table> lists the foreign keys and views that point at it. Stone reads the DDL in .sql files under the code roots; it…
 - [CS-284: Terraform resources, modules and module sources are in the code graph](tasks/CS-284.md) - Agents find Terraform resources, data sources and modules with stone code find, and stone code uses <module file> lists the module blocks whose local source points at it. Parsed with hcl-edit (ADR-22).
 - [CS-285: Top-level YAML and JSON keys are symbols that search and code find return](tasks/CS-285.md) - stone code find database and stone search return the top-level keys of YAML and JSON files under the code roots, with their line ranges, so an agent reads one key instead of the whole file. Config files get no edges and…
 - [CS-286: stone hook points Claude Code at stone before a raw Read or Grep](tasks/CS-286.md) - With stone hook wired as a Claude Code PreToolUse hook on Read and Grep, the agent gets a one-line note naming the stone command that answers the same question (code outline <file> for a Read of an indexed file, code…
+- [CS-287: A diff view shows what changed](tasks/CS-287.md) - 2026-11-13: Owner reference for the diff feature: https://github.com/ivankovic/omnidiff. Not yet planned; scope and component to settle with the owner.
 - [CS-288: stone list rows carry components and links; --status takes a list, --open hides finished items](tasks/CS-288.md) - Agents grouping tasks by feature read every task file because stone list rows lack components and links, and stone list --json dumps changed_files. Rows gain components and links; --status takes a comma list; --open…
 - [CS-289: Release 0.2.0](tasks/CS-289.md) - Cut release 0.2.0: merge driver, stone resolve, list filters and the rest since v0.1.1.
 - [CS-290: stone config add-doc-root adds a folder to doc_roots](tasks/CS-290.md) - stone config can add code_roots and scip_indexes (CS-212) but not doc_roots. A store that reads docs from another repo (VibeHunt keeps specs and decisions in its docs/ GitHub repo and points doc_roots at it) must edit…
